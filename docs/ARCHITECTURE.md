@@ -14,7 +14,7 @@ The implemented slice is property observation: turn one or more model properties
 - optimize the common single-property path separately from the more general nested path;
 - use measured end-to-end performance, not just isolated micro-optimizations, to decide which specializations remain in the implementation.
 
-It is not currently a complete ReactiveUI replacement. In particular, it does not implement ReactiveUI's binding, commands, activation, routing, global notification-provider ecosystem, arbitrary dynamic paths, expression indexers, or before-change observation. The implemented value-observation surface includes direct public-property string lookup, an arity-1 selector, and selector/tuple overloads through arity 12.
+It is not currently a complete ReactiveUI replacement. In particular, it does not implement ReactiveUI's binding, commands, activation, routing, global notification-provider ecosystem, arbitrary dynamic paths, nonconstant index expressions, or before-change observation. The implemented value-observation surface includes direct public-property string lookup, constant-argument indexers, an arity-1 selector, and selector/tuple overloads through arity 12.
 
 ## System shape
 
@@ -81,7 +81,7 @@ There is no scheduler, global service locator, operator pipeline, or framework b
 |---|---|---:|---|---|
 | `WhenAnyValue(source, getter, propertyName)` | Fastest one-property call | None | Safe | Specialized single-property sink |
 | `WhenAnyValue(source, PropertyPath)` | Reusable or generated typed path | None | Safe | Specialized one/two/three-segment sink or general path sink |
-| `WhenAnyValue(source, expression)` | ReactiveUI-style migration | Metadata parsing; cached one/two/three-property paths | Marked `RequiresUnreferencedCode` | Same specialized sinks for common shapes; general path sink otherwise |
+| `WhenAnyValue(source, expression)` | ReactiveUI-style migration | Metadata parsing; cached one/two/three-link member/indexer paths | Marked `RequiresUnreferencedCode` | Same specialized sinks for common shapes; general path sink otherwise |
 | `WhenAnyValue(source, propertyName)` | ReactiveUI string-name migration for one public property | Cached runtime metadata lookup | Marked `RequiresUnreferencedCode` | Specialized single-property sink |
 | One expression/string plus selector | ReactiveUI arity-1 projection | Same resolution cost as its input | Marked `RequiresUnreferencedCode` | Fused direct-property projection sink; general selector wrapper for nested expressions |
 | 2–12 typed paths plus selector/tuple | AOT-safe multi-property projection | None | Safe | Generated, strongly typed fixed-arity combiner |
@@ -143,9 +143,11 @@ The expression API is a compatibility front end over the typed descriptor and su
 
 ### Parsing and validation
 
-`ExpressionPropertyPath.Create` removes `Convert` and `ConvertChecked` wrappers and accepts a non-empty property or field chain rooted at the lambda parameter. For example, `x => x.Address.City` becomes an ordered root-to-leaf segment list. Calls, constants, unrelated objects, and other non-member shapes are rejected with `ArgumentException` instead of silently producing a stream with different semantics. Conversion nodes are path-shape adapters, not compiled operations: the reflected final value must still be assignment/cast-compatible with `TValue`; arbitrary user-defined or numeric conversion logic is not executed by the path engine.
+`ExpressionPropertyPath.Create` removes `Convert` and `ConvertChecked` wrappers and accepts a non-empty property, field, or constant-indexer chain rooted at the lambda parameter. For example, `x => x.Address.City` and `x => x.Groups[0].Name` become ordered root-to-leaf link lists. Calls, constants, unrelated objects, and other unsupported shapes are rejected with `ArgumentException` instead of silently producing a stream with different semantics. Conversion nodes are path-shape adapters, not compiled operations: the reflected final value must still be assignment/cast-compatible with `TValue`; arbitrary user-defined or numeric conversion logic is not executed by the path engine.
 
 Properties and fields are supported in the general compatibility path. Notification filtering uses each member's name. A field can be read as part of a chain, although changes still require an owning object to raise `PropertyChanged` with the matching name because fields do not provide notifications themselves.
+
+Indexer parsing accepts both compiler-emitted accessor calls and explicit `IndexExpression` nodes. Every argument must be a `ConstantExpression`; captured values are rejected with ReactiveUI's `NotSupportedException` message. The notification name is the indexer's metadata name plus `[]`, so ordinary C# indexers use `Item[]` and an `[IndexerName("Entry")]` indexer uses `Entry[]`. Null and empty notification names still mean all properties, while bare `Item` does not match `Item[]`. Array `Length` is rewritten to the reflected `Array.Length` member. Constant array-element access retains ReactiveUI's `ArgumentException`, and a captured array index retains its distinct `NotSupportedException` message.
 
 ### Exact single-property fast path
 
@@ -170,6 +172,12 @@ Chains exactly shaped like `x => x.Address.City` and `x => x.Address.Country.Cod
 
 The non-generic reflected bridge is intentional for trimming diagnostics: it does not use `MakeGenericMethod`, expression compilation, or runtime code generation. The public expression API remains marked `RequiresUnreferencedCode`; the optimization improves its JIT migration path without overstating its AOT contract.
 
+### Constant-indexer fast paths and cache
+
+A direct indexer has a cache scoped to `<TSource,TValue>`. Its atomic last entry compares the member and constant arguments before allocating a link or copied argument array. Misses use a `ConcurrentDictionary` with a value-type structural key: member identity is reference-based, strings and value types compare by value and exact runtime type, and other constants compare by object identity. Nested and mixed member/indexer paths of up to three links use the same structural-key strategy and feed the specialized one-, two-, or three-segment engines; longer shapes use the general watcher graph.
+
+Direct getters with the common `int`, `string`, or `(int,int)` argument shapes bind closed delegates once. This removes argument boxing and reflected invocation from established notifications. Other indexer signatures create one .NET 10 `MethodInvoker`; arities one through four call its fixed-argument overloads, and larger arities pass the cached argument array as a span. This split follows the measured primitive costs and keeps unusual signatures compatible without imposing their generality on common indexers.
+
 ### String property-name compatibility
 
 The string overloads mirror ReactiveUI's direct public-property lookup rather than interpreting dotted strings as nested chains. `StringPropertyPath` keys its cache by closed source/value types, runtime source type, and ordinal property name. A last-entry slot handles repeated call sites and a concurrent dictionary handles mixed properties and concurrent first use.
@@ -178,15 +186,15 @@ An exact property type declared on `TSource` or an assignable base type gets a b
 
 ### General reflected path
 
-Four-or-more-property expressions, field chains, and shapes involving type conversion use `ReflectedPropertyPathSegment` or `ReflectedFieldPathSegment`. Those segments call `PropertyInfo.GetValue` or `FieldInfo.GetValue` when their portion of the chain is rebuilt. They still use the same watcher graph, null rules, distinctness, disposal, and error handling as typed nested paths.
+Four-or-more-link expressions and shapes involving type conversion use `ReflectedPropertyPathSegment`, `ReflectedFieldPathSegment`, or `ReflectedIndexerPathSegment`. Property and field segments call `PropertyInfo.GetValue` or `FieldInfo.GetValue`; indexer segments use their cached `MethodInvoker`. They still use the same watcher graph, null rules, distinctness, disposal, and error handling as typed nested paths. A reflected field returning `null` produces `InvalidOperationException`, matching the audited ReactiveUI behavior.
 
 This boundary is intentional:
 
 - the typed API provides the AOT and predictable-performance contract;
-- the exact one-, two-, and three-property expression fast paths optimize the most common migration calls;
+- the exact one-, two-, and three-link expression fast paths optimize the most common member/indexer migration calls;
 - the reflected fallback preserves useful expression compatibility without pretending to be trim-safe.
 
-A `MethodInvoker`-based alternative for reflected property segments was evaluated during optimization. It did not improve established leaf-change performance and did not produce a reliable rewire win, so the simpler `PropertyInfo.GetValue` implementation was retained.
+A `MethodInvoker`-based alternative for zero-argument reflected property segments was evaluated during optimization. It did not improve established leaf-change performance or produce a reliable rewire win, so properties retain `PropertyInfo.GetValue`. Parameterized indexers are different: the isolated .NET 10 invoker was materially faster than `PropertyInfo.GetValue`, so it remains as the nonspecialized indexer fallback.
 
 ## Subscription engines
 
@@ -276,7 +284,7 @@ An arity-1 selector exists for expression and string compatibility. Selector and
 
 Every arity has a closed `CombineLatestObservable<T1,...,TN,TResult>` implementation. Its subscription stores each latest value in a typed field, one presence flag per input, the last result, one disposable per upstream, and a single gate. Each upstream gets a dedicated generic observer such as `SourceObserver7`; no notification index, `object[]`, boxed value, params array, or general operator pipeline appears on the update path.
 
-Inputs are connected in order and synchronously provide their initial values. The selector first runs when every presence flag is set. Later changes replace one typed slot and project from the latest set. Distinctness is applied to each property input and to the projected result. A custom comparer supplied to the multi-property overload applies to the result; inputs use their default type comparers.
+Inputs are connected in order and synchronously provide their initial values. The selector first runs when every presence flag is set. Later changes replace one typed slot and project from the latest set. Typed overloads apply `isDistinct` to each input and the projected result. ReactiveUI-compatible expression and string overloads apply it to the inputs but do not suppress an equal projected result, matching ReactiveUI 24; supplying an explicit result comparer to an expression overload opts into result filtering. Inputs always use their default type comparers. When result filtering is disabled the sink does not retain `_lastResult`, avoiding an unnecessary reference lifetime.
 
 Selector or upstream errors stop the combiner and dispose every connected input. An exception from the final observer also stops and disposes the combiner before propagating. Source completion is ignored because property observation itself is an open-ended event stream. These rules are shared by the handwritten arity-2 and generated higher-arity state machines.
 
@@ -332,18 +340,20 @@ The optimization sequence concentrated cost where the benchmark matrix showed it
 - **Cache exact two-property expressions.** Warm expression paths reuse the specialized shape without dynamic generic construction.
 - **Specialize three-segment paths.** A continuation factory preserves both intermediate types, enabling suffix-specific rewiring without general watcher arrays or boxed typed values.
 - **Cache exact three-property expressions.** Warm migration calls reach the compact three-level state machine while retaining the deliberate reflection/AOT boundary.
-- **Accept inherited exact properties.** Assignability checks keep base-declared getters on the direct and specialized nested paths; strict declaring-type equality had unnecessarily selected the general engine.
+- **Accept inherited exact properties.** Base-declared getters remain on the direct and specialized nested paths; strict declaring-type equality had unnecessarily selected the general engine.
+- **Parse and structurally cache constant indexers.** The last-entry comparison occurs before link/argument allocation, while a concurrent value-type key preserves mixed-call-site and parallel correctness.
+- **Specialize common indexer signatures.** Bound `int`, `string`, and `(int,int)` delegates eliminate boxing and reflected calls; .NET 10 `MethodInvoker` handles the compatibility tail.
 - **Cache direct string-name metadata.** The common repeated property uses one volatile last-entry check and then the same bound getter/sink as a typed path.
 - **Fuse one-property selectors.** Direct expression and string projections combine input distinctness and selection in one state machine after benchmarks isolated the wrapper's hot-start cost.
 - **Generate fixed-arity sinks.** Multi-property projection through arity 12 uses typed fields and source observers rather than arrays, boxing, or a general operator pipeline.
-- **Reject optimizations that do not improve end-to-end measurements.** The reflected `MethodInvoker` experiment was removed after it failed to improve the relevant nested benchmarks.
+- **Reject optimizations that do not improve end-to-end measurements.** The zero-argument property `MethodInvoker` experiment was removed after it failed to improve the relevant nested benchmarks; only the separately measured parameterized-indexer fallback remains.
 
 The following verified results use BenchmarkDotNet 0.15.8, .NET 10.0.5, ReactiveUI 24.0.0, Release builds, and the same hand-written notification models and observer shape on an Apple M3 Pro. Allocation includes work performed by the benchmark model when it raises an event, not just the observation sink.
 
 | Scenario | ProMvvm typed | ProMvvm expression | ReactiveUI core | ReactiveUI.Reactive |
 |---|---:|---:|---:|---:|
 | Cold construction | 7.128 ns / 56 B (path); 6.220 ns / 56 B (getter) | 180.445 ns / 616 B | 201.745 ns / 712 B | 197.418 ns / 712 B |
-| Hot start | 42.10 ns / 232 B (path); 33.40 ns / 176 B (getter); 41.42 ns / 232 B (generated) | 222.79 ns / 792 B | 331.54 ns / 1,440 B | 333.16 ns / 1,440 B |
+| Hot start | 45.194 ns / 232 B (path); 36.128 ns / 176 B (getter); 44.567 ns / 232 B (generated) | 244.856 ns / 792 B | 362.789 ns / 1,440 B | 373.471 ns / 1,440 B |
 | Subscribe, initial value, dispose | 35.37 ns / 176 B | 38.31 ns / 176 B | 126.97 ns / 728 B | 132.56 ns / 728 B |
 | Single emission | 8.413 ns / 24 B | 10.261 ns / 24 B | 27.458 ns / 88 B | 27.490 ns / 88 B |
 | Burst: 1 change | 9.565 ns / 24 B | 11.200 ns / 24 B | 24.933 ns / 48 B | 25.083 ns / 48 B |
@@ -358,13 +368,18 @@ The following verified results use BenchmarkDotNet 0.15.8, .NET 10.0.5, Reactive
 | Three-segment hot start | 84.81 ns / 472 B | 424.30 ns / 1,392 B | 880.31 ns / 2,864 B | 882.81 ns / 2,864 B |
 | Three-segment leaf change | 8.796 ns / 24 B | 16.655 ns / 48 B | 29.244 ns / 88 B | 28.998 ns / 88 B |
 | Three-segment rewire | 20.055 ns / 24 B | 30.511 ns / 48 B | 109.761 ns / 376 B | 106.872 ns / 376 B |
+| Direct constant-indexer hot start | 42.857 ns / 232 B | 257.366 ns / 888 B | 464.584 ns / 1,736 B | 461.893 ns / 1,736 B |
+| Direct constant-indexer emission | 9.499 ns / 24 B | 11.416 ns / 24 B | 31.944 ns / 88 B | 32.085 ns / 88 B |
+| Nested constant-indexer hot start | 64.265 ns / 352 B | 430.202 ns / 1,424 B | 767.082 ns / 2,456 B | 778.810 ns / 2,456 B |
+| Nested constant-indexer emission | 8.914 ns / 24 B | 17.420 ns / 48 B | 33.388 ns / 88 B | 33.098 ns / 88 B |
+| Nested constant-indexer rewire | 18.861 ns / 24 B | 30.728 ns / 48 B | 120.223 ns / 376 B | 114.236 ns / 376 B |
 
 The new compatibility paths were measured separately because direct string lookup has no typed equivalent:
 
 | Scenario | ProMvvm | ReactiveUI core | ReactiveUI.Reactive |
 |---|---:|---:|---:|
 | Direct string cold construction | 8.250 ns / 56 B | 87.511 ns / 240 B | 88.096 ns / 240 B |
-| Direct string hot start | 45.55 ns / 232 B | 159.82 ns / 616 B | 158.87 ns / 616 B |
+| Direct string hot start | 49.528 ns / 232 B | 178.831 ns / 616 B | 201.444 ns / 616 B |
 | Direct string emission | 8.969 ns / 24 B | 23.08 ns / 88 B | 22.61 ns / 88 B |
 | Expression single-selector hot start | 214.18 ns / 808 B | 331.07 ns / 1,528 B | 328.91 ns / 1,528 B |
 | Expression single-selector emission | 10.337 ns / 24 B | 27.794 ns / 88 B | 27.699 ns / 88 B |
@@ -376,6 +391,8 @@ The new compatibility paths were measured separately because direct string looku
 The explicit-INPC adapter benchmark measures 8.330 ns / 24 B per emission versus 8.344 ns / 24 B for the direct INPC path. The difference is below measurement significance: the adapter adds an indirection at setup, but its steady-state callback reaches the same name filter and typed getter without allocating.
 
 Before direct-selector fusion, the expression selector hot start measured 270.08 ns / 872 B and the string selector measured 71.23 ns / 312 B. The retained specialization reduced those results to 214.18 ns / 808 B and 43.88 ns / 248 B, approximately 20.7% and 38.4% faster, while keeping established notification allocation at 24 B.
+
+Before direct indexer specialization, expression hot start measured 281.131 ns / 976 B and established emission measured 17.843 ns / 48 B. Structural pre-allocation cache lookup plus typed delegate specialization reduced those to 257.366 ns / 888 B and 11.416 ns / 24 B. The primitive benchmark measured `PropertyInfo.GetValue` at 9.371 ns / 24 B, cached-argument `MethodInvoker` at 5.845 ns / 24 B, and a bound delegate at 0.257 ns / 0 B, supporting the chosen two-tier invocation design.
 
 The three-segment specialization was retained only after an in-place before/after run. The general engine measured 17.33 ns / 48 B typed and 23.06 ns / 48 B expression for leaf delivery, then 30.23 ns / 48 B typed and 39.11 ns / 48 B expression for suffix rewiring. The specialized post-change run measured 8.796 ns / 24 B and 16.655 ns / 48 B for leaf delivery, then 20.055 ns / 24 B and 30.511 ns / 48 B for rewiring. That is approximately a 49%/28% time reduction for typed/expression leaf changes and a 34%/22% reduction for typed/expression rewiring, with typed allocation halved.
 
@@ -401,7 +418,7 @@ This comparison is based on the `ReactiveUI` and `ReactiveUI.Reactive` 24.0.0 as
 
 For an expression call, ReactiveUI's `WhenAnyValue` flows through `WhenAny`, `ObservableForProperty`, and its expression-chain machinery. Its `ExpressionChainSink` maintains a gate, per-level state and subscriptions, cached last-value/distinctness state, and protection against a notification racing the initial "kicker" read. `CompiledPropertyChain` supplies cached accessors, while the observable-for-property layer selects a notification provider. The pipeline emits `IObservedChange<TSender,TValue>` records, and `WhenAnyValue` selects each record's `Value` for its caller.
 
-ReactiveUI also ships generated specialized `WhenAnyValueSink` and `WhenAnyChangeSink` implementations through arity 12. Its machinery supports capabilities that ProMvvm's value-only sinks do not need to carry: sender/expression metadata, arbitrary expression/indexer paths, provider selection, initial-value controls, warning suppression, and infrastructure used by before-change observation. Both now expose direct string-name `WhenAnyValue`; ProMvvm resolves that deliberately narrow case straight to its single-property engine.
+ReactiveUI also ships generated specialized `WhenAnyValueSink` and `WhenAnyChangeSink` implementations through arity 12. Its machinery supports capabilities that ProMvvm's value-only sinks do not need to carry: sender/expression metadata, broader expression-chain paths, provider selection, initial-value controls, warning suppression, and infrastructure used by before-change observation. Both now expose direct string-name `WhenAnyValue`; ProMvvm resolves that deliberately narrow case straight to its single-property engine.
 
 That breadth explains an important design difference. ProMvvm starts with the narrow value stream it wants to expose, attaches directly to `INotifyPropertyChanged`, and stores only names, getters, cached values, and handlers. ReactiveUI routes observation through a reusable framework abstraction that supports more source types and richer observed-change semantics.
 
@@ -413,15 +430,16 @@ That breadth explains an important design difference. ProMvvm starts with the na
 | Direct-property steady-state read | Typed delegate | Cached typed delegate | Cached/compiled chain accessor | Cached/compiled chain accessor |
 | Two-segment read | Specialized typed getters | Cached specialized shape with reflected getters | Compiled property-chain machinery | Compiled property-chain machinery |
 | General nested read | Typed segment delegates through object bridge | Reflected member segments | Compiled property-chain machinery | Compiled property-chain machinery |
+| Constant indexer read | Expressible as an explicit typed getter/path | Cached bound delegate for common signatures; `MethodInvoker` fallback | Compiled property-chain machinery | Compiled property-chain machinery |
 | Emitted internal shape | `TValue` | `TValue` | Observed-change infrastructure, then `TValue` | Observed-change infrastructure, then `TValue` |
 | Notification source | Direct INPC or explicit local adapter | Direct INPC or explicit local adapter | Pluggable observable-for-property providers | Pluggable observable-for-property providers |
 | Synchronous initial value | Yes | Yes | Yes for benchmarked call | Yes for benchmarked call |
 | Cold, independent subscriptions | Yes | Yes | Yes | Yes |
 | Nested rewiring | Yes, cached prefix/suffix rebuild | Yes, same graph | Yes, expression-chain levels | Yes, expression-chain levels |
 | Intermediate-null behavior | Suppress until valid | Same | Supported by broader chain/warning behavior | Supported by broader chain/warning behavior |
-| Final distinctness | Default; configurable comparer or disabled | Same | `WhenAnyValue` value semantics | `WhenAnyValue` value semantics |
+| Final distinctness | Default; configurable comparer or disabled | Single/typed paths are configurable; multi expression/string selectors preserve equal results unless an explicit expression comparer opts in | `WhenAnyValue` value semantics | `WhenAnyValue` value semantics |
 | Multi-property arity | Generated through 12 | Generated through 12 | Generated through 12 | Generated through 12 |
-| String/dynamic observation | No runtime lookup | Direct public property names; no dynamic/indexer paths | Yes | Yes |
+| String/dynamic observation | No runtime lookup | Direct public property names plus constant expression indexers; no dotted strings or nonconstant indices | Broader expression/string support | Broader expression/string support |
 | Before-change infrastructure | No | No | Available through broader ReactiveUI APIs | Available through broader ReactiveUI APIs |
 | Global/provider configuration | None; adapters are call-local | None; adapters are call-local | Participates in ReactiveUI builder/services | Participates in ReactiveUI.Reactive builder/services |
 | System.Reactive runtime dependency | None | None | None in the optimized core distribution | Yes |
@@ -474,8 +492,9 @@ The unit suite verifies the architecture's externally visible invariants:
 - nested leaf updates, intermediate replacement, old-branch detachment, null suppression, final-null emission, and disposal;
 - reentrant notifications and per-subscription serialization;
 - property, nested, field, and conversion expression shapes plus invalid-expression rejection;
+- direct, nested, custom-name, explicit-node, and one-through-five-argument constant indexers; array length and ReactiveUI-compatible captured/array rejection behavior;
 - direct string-name lookup, missing/runtime-derived/type-conversion behavior, and arity-1 selector fusion/fallback;
-- concurrent expression-cache use;
+- concurrent expression-cache use, alternating index constants, and reference-identity constant keys;
 - parallel notification serialization and concurrent subscribe/dispose stress;
 - selector and tuple behavior at every typed arity plus expression, string-name, and adapter boundaries at arity 12;
 - custom-event, observable-stream, composed mixed-chain, and synchronous-callback adapters;
@@ -489,7 +508,7 @@ Release test settings enforce 100% line and method coverage and at least 98% bra
 - [`WhenAnyValueExtensions.Multi.cs`](../src/ProMvvm/WhenAnyValueExtensions.Multi.cs) bootstraps the arity-2 selector and tuple APIs.
 - [`ProMvvmGenerator.cs`](../src/ProMvvm.SourceGenerators/ProMvvmGenerator.cs) emits arity 3–12 overloads and sinks plus consumer property descriptors.
 - [`PropertyPath.cs`](../src/ProMvvm/PropertyPath.cs) and [`PropertyPathFactory.cs`](../src/ProMvvm/PropertyPathFactory.cs) implement immutable typed descriptors.
-- [`ExpressionPropertyPath.cs`](../src/ProMvvm/ExpressionPropertyPath.cs) parses compatibility expressions and owns the exact-property cache.
+- [`ExpressionPropertyPath.cs`](../src/ProMvvm/ExpressionPropertyPath.cs) parses compatibility expressions and owns the exact-member/indexer structural caches and invocation specializations.
 - [`StringPropertyPath.cs`](../src/ProMvvm/StringPropertyPath.cs) resolves and caches ReactiveUI-compatible direct property names.
 - [`SinglePropertyObservable.cs`](../src/ProMvvm/SinglePropertyObservable.cs) is the specialized typed single-property state machine.
 - [`SinglePropertyProjectionObservable.cs`](../src/ProMvvm/SinglePropertyProjectionObservable.cs) fuses direct expression/string selection into one state machine; [`SelectObservable.cs`](../src/ProMvvm/SelectObservable.cs) handles nested selector fallback.
@@ -498,7 +517,7 @@ Release test settings enforce 100% line and method coverage and at least 98% bra
 - [`PropertyPathObservable.cs`](../src/ProMvvm/PropertyPathObservable.cs) is the general cached watcher graph.
 - [`CombineLatestObservable.cs`](../src/ProMvvm/CombineLatestObservable.cs) is the arity-2 projection state machine; generated siblings cover arities 3–12.
 - [`PropertyNotificationAdapters.cs`](../src/ProMvvm/PropertyNotificationAdapters.cs) defines explicit adapter construction and composition.
-- [Unit tests](../tests/ProMvvm.Tests) specify engine behavior; [generator tests](../tests/ProMvvm.SourceGenerators.Tests) specify emitted code; [integration tests](../tests/ProMvvm.IntegrationTests) specify ecosystem compatibility.
+- [Unit tests](../tests/ProMvvm.Tests) specify engine behavior; [generator tests](../tests/ProMvvm.SourceGenerators.Tests) specify emitted code; the [ReactiveUI.Reactive](../tests/ProMvvm.IntegrationTests) and [ReactiveUI core](../tests/ProMvvm.ReactiveUiCoreIntegrationTests) integration projects specify package-level ecosystem compatibility.
 - [Benchmarks](../benchmarks/ProMvvm.Benchmarks) and their [results guide](../benchmarks/README.md) define the performance comparison.
 
 ## Current extension points and constraints
@@ -506,7 +525,7 @@ Release test settings enforce 100% line and method coverage and at least 98% bra
 The architecture leaves clear paths for future work without weakening the typed core:
 
 - support generated descriptors for generic and inherited model shapes with unambiguous generated naming;
-- add constant-argument expression indexers with ReactiveUI-compatible `Item[]` notification semantics;
+- specialize additional indexer signatures only when end-to-end measurements justify their code-size cost;
 - specialize four-or-more nested lengths only where measurements justify the generic code-size cost;
 - add adapter-specific setup/hot-start benchmarks and optional typed adapter contracts if setup becomes material;
 - benchmark ReactiveUI source-generated observation separately from its expression surface;

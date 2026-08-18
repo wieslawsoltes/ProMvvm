@@ -61,6 +61,8 @@ using var subscription = viewModel.WhenAnyValue(x => x.Address!.City)
 
 Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact single-property expressions cache their resolved metadata and use a bound getter with the same specialized sink as typed paths, so steady-state notifications do not reflect. Other compatible expression shapes use the general reflected path engine. Use typed paths in trimming or NativeAOT applications.
 
+The migration parser also supports ReactiveUI-compatible constant indexers, including nested paths. `x => x.Items[0]` listens for `Item[]` (or the type's custom `IndexerName`) and rewires like an ordinary property chain. Captured/nonconstant indices and array-element expressions retain ReactiveUI 24's rejection behavior; array `Length` is supported.
+
 ReactiveUI-compatible direct property-name and single-property selector overloads are available for migration code as well. Property-name metadata is cached, and direct selectors use a fused subscription rather than allocating a second observable pipeline:
 
 ```csharp
@@ -80,10 +82,11 @@ using var byName = viewModel.WhenAnyValue<SearchViewModel, string>(nameof(Search
 - Produces a cold observable with independent subscriptions.
 - Observes nested `INotifyPropertyChanged` chains and rewires when an intermediate object changes.
 - Suppresses output while an intermediate object is `null`; a `null` final value remains valid.
-- Applies final-value distinctness by default, including across temporarily invalid nested chains.
+- Applies final-value distinctness by default for single and typed paths, including across temporarily invalid nested chains; multi expression/string selectors preserve ReactiveUI's input-only distinctness unless an expression result comparer is supplied.
 - Supports custom equality comparers and disabling distinctness.
 - Supports a ReactiveUI-compatible single-property selector plus typed, expression, and string-name selector overloads through arity 12.
 - Supports typed, expression, and string-name tuple overloads from arity 2 through arity 12.
+- Supports constant-argument expression indexers, custom indexer notification names, nested rewiring, and ReactiveUI-compatible array-length/error behavior.
 - Accepts explicit notification adapters for custom events or `IObservable<string?>` change streams, including mixed object chains, without global registration.
 - Serializes model event handling and observer notification per subscription.
 - Detaches all handlers on disposal or terminal getter/selector error.
@@ -113,6 +116,7 @@ dotnet build ProMvvm.slnx -c Release
 dotnet test tests/ProMvvm.Tests -c Release
 dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release
 dotnet test tests/ProMvvm.IntegrationTests -c Release
+dotnet test tests/ProMvvm.ReactiveUiCoreIntegrationTests -c Release
 
 dotnet publish tests/ProMvvm.AotSmoke -c Release -r osx-arm64 --self-contained
 ./tests/ProMvvm.AotSmoke/bin/Release/net10.0/osx-arm64/publish/ProMvvm.AotSmoke
@@ -130,7 +134,7 @@ The BenchmarkDotNet suite compares typed, expression, and direct string-name Pro
 3. ReactiveUI 24 core expression paths.
 4. ReactiveUI.Reactive 24 expression paths.
 
-It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, direct and projected string-name calls, fused single selectors, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), two- and three-segment hot start, nested leaf emission and rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
+It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, direct and projected string-name calls, fused single selectors, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), two- and three-segment hot start, nested leaf emission and rewiring, constant-indexer hot start/emission/rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
 
 ```bash
 dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release -- --filter '*'
@@ -140,6 +144,6 @@ See [benchmarks/README.md](benchmarks/README.md) for focused commands and measur
 
 ## Status and next parity work
 
-The current compatibility milestone includes a fused arity-1 selector, generated arity-2-through-12 expression/string APIs and specialized sinks, cached direct string-name observation, generated property descriptors, explicit notification adapters, two- and three-segment specialization, inherited-property expression fast paths, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, arbitrary dynamic paths, and expression indexers remain outside the current slice.
+The current compatibility milestone includes a fused arity-1 selector, generated arity-2-through-12 expression/string APIs and specialized sinks, cached direct string-name observation, generated property descriptors, explicit notification adapters, two- and three-segment specialization, inherited-property and constant-indexer expression fast paths, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, arbitrary dynamic paths, and nonconstant index expressions remain outside the current slice.
 
 The compatibility namespace is `ProMvvm`, so both libraries may be referenced during gradual migration. The explicit getter + property-name overload also avoids extension ambiguity when `ReactiveUI.Reactive` is imported.
