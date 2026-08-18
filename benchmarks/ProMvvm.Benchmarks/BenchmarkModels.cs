@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace ProMvvm.Benchmarks;
 
+[GeneratePropertyPaths]
 public sealed class BenchmarkModel : INotifyPropertyChanged
 {
     private int _value;

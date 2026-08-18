@@ -19,6 +19,12 @@ public class HotStartBenchmarks : BenchmarkConfig
             .Dispose();
 
     [Benchmark]
+    public void ProMvvmGeneratedDescriptor() =>
+        _model.WhenAnyValue(BenchmarkModelPropertyPaths.Value)
+            .Subscribe(_observer)
+            .Dispose();
+
+    [Benchmark]
 #pragma warning disable IL2026
     public void ProMvvmExpression() =>
         _model.WhenAnyValue(value => value.Value).Subscribe(_observer).Dispose();
