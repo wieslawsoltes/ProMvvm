@@ -28,6 +28,7 @@ flowchart LR
     Resolver[Expression path resolver]
     Single[SinglePropertyObservable]
     TwoSegment[TwoSegmentPropertyObservable]
+    ThreeSegment[ThreeSegmentPropertyObservable]
     Nested[PropertyPathObservable]
     Combine[Generated arity 2-12 sinks]
     Adapter[Explicit notification adapter]
@@ -40,17 +41,21 @@ flowchart LR
     Caller --> Expression --> Resolver --> TypedPath
     TypedPath -->|one optimized segment| Single
     TypedPath -->|two optimized segments| TwoSegment
-    TypedPath -->|three or more/general segments| Nested
+    TypedPath -->|three optimized segments| ThreeSegment
+    TypedPath -->|four or more/general segments| Nested
     Single <--> INPC
     TwoSegment <--> INPC
+    ThreeSegment <--> INPC
     Nested <--> INPC
     Single <--> Adapter
     Nested <--> Adapter
     Single --> Observer
     Nested --> Observer
     TwoSegment --> Observer
+    ThreeSegment --> Observer
     Single --> Combine
     TwoSegment --> Combine
+    ThreeSegment --> Combine
     Nested --> Combine
     Combine --> Observer
 ```
@@ -69,8 +74,8 @@ There is no scheduler, global service locator, operator pipeline, or framework b
 | API | Intended use | Reflection | Trim/NativeAOT contract | Runtime engine |
 |---|---|---:|---|---|
 | `WhenAnyValue(source, getter, propertyName)` | Fastest one-property call | None | Safe | Specialized single-property sink |
-| `WhenAnyValue(source, PropertyPath)` | Reusable or generated typed path | None | Safe | Specialized one/two-segment sink or general path sink |
-| `WhenAnyValue(source, expression)` | ReactiveUI-style migration | Metadata parsing; cached one/two-property paths | Marked `RequiresUnreferencedCode` | Same specialized sinks for common shapes; general path sink otherwise |
+| `WhenAnyValue(source, PropertyPath)` | Reusable or generated typed path | None | Safe | Specialized one/two/three-segment sink or general path sink |
+| `WhenAnyValue(source, expression)` | ReactiveUI-style migration | Metadata parsing; cached one/two/three-property paths | Marked `RequiresUnreferencedCode` | Same specialized sinks for common shapes; general path sink otherwise |
 | 2–12 typed paths plus selector/tuple | AOT-safe multi-property projection | None | Safe | Generated, strongly typed fixed-arity combiner |
 | 2–12 expressions plus selector/tuple | Migration multi-property projection | Same expression rules as above | Marked `RequiresUnreferencedCode` | Resolved paths plus the same fixed-arity combiner |
 | Any typed/expression form plus adapter | Custom event or observable notification source | No extra reflection | Typed form remains safe | Adapter-specific single/general path sink |
@@ -105,7 +110,8 @@ Generated fields contain only a constant property name and a static typed getter
 
 - an `ImmutableArray<IPropertyPathSegment>` for the general chain;
 - for a one-segment typed path, the original property name and strongly typed getter in dedicated fields;
-- an optional specialized factory for a two-segment chain;
+- an optional specialized factory for a two- or three-segment chain;
+- a two-segment continuation factory that preserves all concrete getter types when a third segment is appended;
 - a `Then` operation that returns a new path with one typed child segment appended.
 
 Each typed segment stores a normal ahead-of-time compiled delegate. The general segment interface exposes `object? GetValue(object instance)`, which allows heterogeneous chains such as `Person -> Address -> string` to live in one immutable array. That generality can box value types. The dedicated single-property fields are therefore not just a lookup shortcut: they let the hottest case bypass the object bridge and keep `TValue` generic from the source getter through the observer.
@@ -118,9 +124,10 @@ The typed path overload dispatches before subscription:
 
 - a one-segment path enters `SinglePropertyObservable<TSource,TValue>`;
 - a two-segment path enters `TwoSegmentPropertyObservable<TSource,TIntermediate,TValue>`;
-- a longer or otherwise general path enters `PropertyPathObservable<TSource,TValue>`.
+- a three-segment path enters `ThreeSegmentPropertyObservable<TSource,TIntermediate1,TIntermediate2,TValue>`;
+- a four-segment or otherwise general path enters `PropertyPathObservable<TSource,TValue>`.
 
-The two-segment descriptor retains both concrete getter types in its factory, so root replacement and leaf changes never cross the `object`-valued segment interface. The single- and two-segment runtimes do not pay for segment arrays, boxed cached values, watcher arrays, or loop dispatch they cannot use.
+The two- and three-segment descriptors retain every concrete getter type in their factories, so rewiring and leaf changes never cross the `object`-valued segment interface. The specialized runtimes do not pay for segment arrays, boxed cached values, watcher arrays, or loop dispatch they cannot use.
 
 ## Expression compatibility architecture
 
@@ -147,20 +154,20 @@ The cache combines a `ConcurrentDictionary<PropertyInfo,CacheEntry>` with an ato
 
 Caching the resolved descriptor cannot remove the expression tree that the caller constructs for each invocation. This is why warmed expression hot start remains more expensive than a reused typed descriptor or direct getter even though notification-time reads use the same bound delegate.
 
-### Exact two-property fast path
+### Exact two- and three-property fast paths
 
-A chain exactly shaped like `x => x.Address.City` has its own cache keyed by the root and leaf `PropertyInfo` pair. A last-entry slot handles the usual repeated call site; a concurrent dictionary handles mixed paths and concurrent first use. The cached descriptor targets the same two-segment subscription state machine as a typed `.Then(...)` path. Its getters use `PropertyInfo.GetValue`, because the compatibility API must bridge the runtime intermediate type without dynamic generic construction, but it avoids the general watcher/value arrays and suffix loop.
+Chains exactly shaped like `x => x.Address.City` and `x => x.Address.Country.Code` have caches keyed by their `PropertyInfo` tuples. A last-entry slot handles the usual repeated call site; concurrent dictionaries handle mixed paths and concurrent first use. The cached descriptors target the same two- and three-segment subscription state machines as typed `.Then(...)` paths. Their intermediate getters use `PropertyInfo.GetValue`, because the compatibility API must bridge runtime intermediate types without dynamic generic construction, but they avoid the general watcher/value arrays and suffix loop. Exact properties declared on assignable base types are eligible too, so inherited direct and nested call sites do not fall back to the general reflected engine.
 
 The non-generic reflected bridge is intentional for trimming diagnostics: it does not use `MakeGenericMethod`, expression compilation, or runtime code generation. The public expression API remains marked `RequiresUnreferencedCode`; the optimization improves its JIT migration path without overstating its AOT contract.
 
 ### General reflected path
 
-Longer expressions, field chains, and shapes involving type conversion use `ReflectedPropertyPathSegment` or `ReflectedFieldPathSegment`. Those segments call `PropertyInfo.GetValue` or `FieldInfo.GetValue` when their portion of the chain is rebuilt. They still use the same watcher graph, null rules, distinctness, disposal, and error handling as typed nested paths.
+Four-or-more-property expressions, field chains, and shapes involving type conversion use `ReflectedPropertyPathSegment` or `ReflectedFieldPathSegment`. Those segments call `PropertyInfo.GetValue` or `FieldInfo.GetValue` when their portion of the chain is rebuilt. They still use the same watcher graph, null rules, distinctness, disposal, and error handling as typed nested paths.
 
 This boundary is intentional:
 
 - the typed API provides the AOT and predictable-performance contract;
-- the exact one- and two-property expression fast paths optimize the most common migration calls;
+- the exact one-, two-, and three-property expression fast paths optimize the most common migration calls;
 - the reflected fallback preserves useful expression compatibility without pretending to be trim-safe.
 
 A `MethodInvoker`-based alternative for reflected property segments was evaluated during optimization. It did not improve established leaf-change performance and did not produce a reliable rewire win, so the simpler `PropertyInfo.GetValue` implementation was retained.
@@ -200,6 +207,14 @@ When an adapter is supplied, `AdapterSinglePropertyObservable` replaces the dire
 `TwoSegmentPropertyObservable<TSource,TIntermediate,TValue>` stores the root and child as their concrete generic types, two getters, and at most two `INotifyPropertyChanged` references. A leaf event invokes only the typed leaf getter. A root event detaches the previous child, invokes the root getter, attaches the new child, and publishes its leaf. Null intermediates suppress publication while preserving the last emitted value for distinctness continuity.
 
 This state machine is intentionally limited to the direct `INotifyPropertyChanged` route. An explicit adapter can vary by object within a chain, so adapter-backed two-segment paths use the general watcher graph, whose per-level subscriptions express that variability correctly.
+
+### Specialized three-segment state machine
+
+`ThreeSegmentPropertyObservable<TSource,TIntermediate1,TIntermediate2,TValue>` extends the same concrete-type layout by one level. It owns three stored event-handler delegates and retains the two intermediate values in their actual generic types. A root replacement rebuilds both descendants, a first-intermediate replacement rebuilds only the final parent and leaf, and a leaf notification invokes only the final typed getter. Null at either intermediate level suppresses publication and detaches only the invalid suffix.
+
+The specialization is created without runtime generic construction. A two-segment `PropertyPath` carries a continuation factory; its next `.Then(...)` call builds a closed three-segment factory while all intermediate types are still known to the C# compiler. This keeps the typed route trim-safe and NativeAOT-safe and lets .NET 10's JIT see closed delegate and state-machine types. A fourth segment deliberately transitions to the general watcher graph so code size does not grow for every possible path length.
+
+As with the two-segment engine, explicit notification adapters use the general graph because the adapter can select a different notification mechanism for every object in the chain.
 
 ### Nested watcher graph
 
@@ -276,6 +291,14 @@ Observer callbacks execute while the subscription gate is held. This makes state
 
 The cold observable itself retains its source. Disposing a subscription releases event-handler relationships but does not make a separately retained observable release the source; consumers should release unused observable instances as they would any object holding a model reference.
 
+## .NET 10 optimization boundaries
+
+The implementation is shaped to expose ordinary closed generic types and direct delegate targets to the runtime. [.NET 10's performance work](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-10/) expands inlining, devirtualization, dynamic-PGO, and escape-analysis opportunities, while the runtime's [dynamic PGO design](https://github.com/dotnet/runtime/blob/main/docs/design/features/DynamicPgo.md) identifies inlining, code layout, and guarded devirtualization as its main optimization channels. The [guarded devirtualization design](https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/jit/GuardedDevirtualization.md) also treats delegate invocation as an indirect-call target suitable for speculation. Closed typed state machines and stable cached delegate instances give the JIT useful shapes without depending on undocumented implementation behavior.
+
+The expression compatibility front end does not compile expression trees. Runtime `Expression.Compile`, `DynamicMethod`, and reflection-created closed generic factories could improve some warmed reflected getter calls, but they would add startup work and dynamic-code/NativeAOT constraints to a surface deliberately designed with a visible `RequiresUnreferencedCode` boundary. An attempted open getter binding from a concrete declaring type to `Func<object,TValue>` is not signature-compatible, so it cannot remove the object bridge safely. The retained design uses a typed bound delegate for direct properties and reflected bridge getters for nested expression intermediates.
+
+Source generation cannot transparently rewrite an arbitrary expression call. Roslyn's [source-generator design](https://github.com/dotnet/roslyn/blob/main/docs/features/source-generators.md) is additive and generators cannot modify user code or depend on another generator's output ordering. Interceptors also remain experimental in Roslyn's [language feature status](https://github.com/dotnet/roslyn/blob/main/docs/Language%20Feature%20Status.md?plain=1). ProMvvm therefore exposes generated descriptors as an explicit terse typed API instead of making production performance depend on experimental call-site interception.
+
 ## Performance architecture
 
 The optimization sequence concentrated cost where the benchmark matrix showed it mattered:
@@ -289,6 +312,9 @@ The optimization sequence concentrated cost where the benchmark matrix showed it
 - **Cache the resolved nested prefix.** A leaf change reads only the leaf; an intermediate replacement rebuilds only its suffix.
 - **Specialize two-segment paths.** Concrete root, intermediate, and leaf types remove arrays, boxing, and virtual segment dispatch from the dominant nested shape.
 - **Cache exact two-property expressions.** Warm expression paths reuse the specialized shape without dynamic generic construction.
+- **Specialize three-segment paths.** A continuation factory preserves both intermediate types, enabling suffix-specific rewiring without general watcher arrays or boxed typed values.
+- **Cache exact three-property expressions.** Warm migration calls reach the compact three-level state machine while retaining the deliberate reflection/AOT boundary.
+- **Accept inherited exact properties.** Assignability checks keep base-declared getters on the direct and specialized nested paths; strict declaring-type equality had unnecessarily selected the general engine.
 - **Generate fixed-arity sinks.** Multi-property projection through arity 12 uses typed fields and source observers rather than arrays, boxing, or a general operator pipeline.
 - **Reject optimizations that do not improve end-to-end measurements.** The reflected `MethodInvoker` experiment was removed after it failed to improve the relevant nested benchmarks.
 
@@ -306,12 +332,18 @@ The following verified results use BenchmarkDotNet 0.15.8, .NET 10.0.5, Reactive
 | Two-property selector | 23.75 ns / 24 B | 25.35 ns / 24 B | 47.71 ns / 88 B | 47.53 ns / 88 B |
 | Twelve-property selector | 206.7 ns / 24 B | 226.9 ns / 24 B | 552.3 ns / 792 B | 553.8 ns / 792 B |
 | Twelve-property hot start | 1.220 us / 5.95 KB | 3.457 us / 12.51 KB | 4.773 us / 21.95 KB | 4.859 us / 21.95 KB |
+| Two-segment hot start | 63.93 ns / 352 B | 335.99 ns / 1,104 B | 611.36 ns / 2,152 B | 620.88 ns / 2,152 B |
 | Nested leaf change | 9.940 ns / 24 B | 19.166 ns / 48 B | 31.295 ns / 88 B | 31.174 ns / 88 B |
 | Nested rewire | 17.67 ns / 24 B | 29.50 ns / 48 B | 102.61 ns / 376 B | 106.67 ns / 376 B |
+| Three-segment hot start | 84.81 ns / 472 B | 424.30 ns / 1,392 B | 880.31 ns / 2,864 B | 882.81 ns / 2,864 B |
+| Three-segment leaf change | 8.796 ns / 24 B | 16.655 ns / 48 B | 29.244 ns / 88 B | 28.998 ns / 88 B |
+| Three-segment rewire | 20.055 ns / 24 B | 30.511 ns / 48 B | 109.761 ns / 376 B | 106.872 ns / 376 B |
 
 "Hot start" here means a warmed JIT and warmed expression-path cache while still measuring observable construction, expression-tree construction where applicable, subscription, synchronous initial delivery, disposal, and all resulting allocation. It does not mean a shared or already-connected hot observable.
 
 The explicit-INPC adapter benchmark measures 8.330 ns / 24 B per emission versus 8.344 ns / 24 B for the direct INPC path. The difference is below measurement significance: the adapter adds an indirection at setup, but its steady-state callback reaches the same name filter and typed getter without allocating.
+
+The three-segment specialization was retained only after an in-place before/after run. The general engine measured 17.33 ns / 48 B typed and 23.06 ns / 48 B expression for leaf delivery, then 30.23 ns / 48 B typed and 39.11 ns / 48 B expression for suffix rewiring. The specialized post-change run measured 8.796 ns / 24 B and 16.655 ns / 48 B for leaf delivery, then 20.055 ns / 24 B and 30.511 ns / 48 B for rewiring. That is approximately a 49%/28% time reduction for typed/expression leaf changes and a 34%/22% reduction for typed/expression rewiring, with typed allocation halved.
 
 The results align with the architecture:
 
@@ -320,6 +352,7 @@ The results align with the architecture:
 - warmed direct expressions get close to typed subscription/emission cost because they also reach that sink;
 - expression construction and hot start retain expression-tree and resolver costs that caching cannot erase;
 - typed two-segment paths now stay fully generic, while warmed two-property expressions share their compact state machine but retain reflective getters;
+- typed three-segment paths likewise retain every concrete getter type; warmed three-property expressions share the state machine but keep reflected bridge getters and value-type boxing;
 - a generated descriptor is performance-equivalent to its handwritten typed descriptor because both are the same runtime object shape;
 - fixed-arity sinks preserve 24-byte model-notification allocation even at arity 12, while the compared ReactiveUI calls allocate 792 bytes;
 - both ReactiveUI distributions have nearly identical steady-state results because their benchmarked APIs share the same broader observation design.
@@ -424,6 +457,7 @@ Release test settings enforce 100% line and method coverage and at least 98% bra
 - [`ExpressionPropertyPath.cs`](../src/ProMvvm/ExpressionPropertyPath.cs) parses compatibility expressions and owns the exact-property cache.
 - [`SinglePropertyObservable.cs`](../src/ProMvvm/SinglePropertyObservable.cs) is the specialized typed single-property state machine.
 - [`TwoSegmentPropertyObservable.cs`](../src/ProMvvm/TwoSegmentPropertyObservable.cs) is the specialized typed two-segment state machine.
+- [`ThreeSegmentPropertyObservable.cs`](../src/ProMvvm/ThreeSegmentPropertyObservable.cs) is the specialized typed three-segment state machine.
 - [`PropertyPathObservable.cs`](../src/ProMvvm/PropertyPathObservable.cs) is the general cached watcher graph.
 - [`CombineLatestObservable.cs`](../src/ProMvvm/CombineLatestObservable.cs) is the arity-2 projection state machine; generated siblings cover arities 3–12.
 - [`PropertyNotificationAdapters.cs`](../src/ProMvvm/PropertyNotificationAdapters.cs) defines explicit adapter construction and composition.
@@ -435,7 +469,7 @@ Release test settings enforce 100% line and method coverage and at least 98% bra
 The architecture leaves clear paths for future work without weakening the typed core:
 
 - support generated descriptors for generic and inherited model shapes with unambiguous generated naming;
-- specialize additional nested lengths only where measurements justify the generic code-size cost;
+- specialize four-or-more nested lengths only where measurements justify the generic code-size cost;
 - add adapter-specific setup/hot-start benchmarks and optional typed adapter contracts if setup becomes material;
 - benchmark ReactiveUI source-generated observation separately from its expression surface;
 - add mobile/browser platform execution as .NET 10 runners and NativeAOT support permit;

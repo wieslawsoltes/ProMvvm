@@ -31,7 +31,7 @@ using var subscription = viewModel.WhenAnyValue(city).Subscribe(Console.WriteLin
 ```
 
 These overloads use only normal delegates and property-change events. They do not reflect, compile expressions, or require dynamic code.
-Single-property and two-segment typed paths use specialized generic sinks that avoid value boxing and the general watcher graph on their steady-state notification paths.
+Single-property plus two- and three-segment typed paths use specialized generic sinks that avoid value boxing and the general watcher graph on their steady-state notification paths.
 
 Annotate a model to generate reusable descriptors for every accessible property:
 
@@ -116,7 +116,7 @@ The BenchmarkDotNet suite compares four paths under the same notification models
 3. ReactiveUI 24 core expression paths.
 4. ReactiveUI.Reactive 24 expression paths.
 
-It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), nested leaf emission, nested-chain rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
+It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), two- and three-segment hot start, nested leaf emission and rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
 
 ```bash
 dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release -- --filter '*'
@@ -126,6 +126,6 @@ See [benchmarks/README.md](benchmarks/README.md) for focused commands and measur
 
 ## Status and next parity work
 
-The current compatibility milestone includes generated arity-2-through-12 APIs and specialized sinks, generated property descriptors, explicit notification adapters, two-segment specialization, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, and string/dynamic paths remain outside the current slice.
+The current compatibility milestone includes generated arity-2-through-12 APIs and specialized sinks, generated property descriptors, explicit notification adapters, two- and three-segment specialization, inherited-property expression fast paths, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, and string/dynamic paths remain outside the current slice.
 
 The compatibility namespace is `ProMvvm`, so both libraries may be referenced during gradual migration. The explicit getter + property-name overload also avoids extension ambiguity when `ReactiveUI.Reactive` is imported.

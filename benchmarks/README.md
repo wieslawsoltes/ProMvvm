@@ -13,6 +13,10 @@ All benchmarks use BenchmarkDotNet, .NET 10, the same hand-written `INotifyPrope
 | Burst | 1, 100, or 10,000 property changes | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Nested leaf | Change a leaf on an established two-level chain | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Nested rewire | Replace the intermediate object and rewire handlers | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Nested hot start | Construct, subscribe, initialize, and dispose a two-segment path | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Three-segment hot start | Construct, subscribe, initialize, and dispose a three-segment path | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Three-segment leaf | Change a leaf on an established three-segment chain | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Three-segment rewire | Replace the final parent and rewire only the affected suffix | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Multi-property | Change one input of an arity-2 selector | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Arity-12 emission | Notify twelve subscribed inputs and project each latest set | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Arity-12 hot start | Create, subscribe, synchronously initialize twelve inputs, and dispose | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
@@ -36,12 +40,18 @@ Measured on 2026-08-18 with BenchmarkDotNet 0.15.8, .NET 10.0.5, macOS 26.6, and
 | Two-property selector | 23.75 ns / 24 B | 25.35 ns / 24 B | 47.71 ns / 88 B | 47.53 ns / 88 B |
 | Twelve-property selector | 206.7 ns / 24 B | 226.9 ns / 24 B | 552.3 ns / 792 B | 553.8 ns / 792 B |
 | Twelve-property hot start | 1.220 us / 5.95 KB | 3.457 us / 12.51 KB | 4.773 us / 21.95 KB | 4.859 us / 21.95 KB |
+| Two-segment hot start | 63.93 ns / 352 B | 335.99 ns / 1,104 B | 611.36 ns / 2,152 B | 620.88 ns / 2,152 B |
 | Nested leaf change | 9.940 ns / 24 B | 19.166 ns / 48 B | 31.295 ns / 88 B | 31.174 ns / 88 B |
 | Nested rewire | 17.67 ns / 24 B | 29.50 ns / 48 B | 102.61 ns / 376 B | 106.67 ns / 376 B |
+| Three-segment hot start | 84.81 ns / 472 B | 424.30 ns / 1,392 B | 880.31 ns / 2,864 B | 882.81 ns / 2,864 B |
+| Three-segment leaf change | 8.796 ns / 24 B | 16.655 ns / 48 B | 29.244 ns / 88 B | 28.998 ns / 88 B |
+| Three-segment rewire | 20.055 ns / 24 B | 30.511 ns / 48 B | 109.761 ns / 376 B | 106.872 ns / 376 B |
 
 The explicit-adapter emission result is 8.330 ns / 24 B versus 8.344 ns / 24 B for direct INPC, which is indistinguishable at this measurement resolution.
 
 Hot start means a warmed process and expression-path cache, while still including each operation's observable construction, runtime expression-tree construction where applicable, subscription, synchronous initial value, and disposal. It does not mean a shared hot observable.
+
+Before the three-segment specialization, the same leaf benchmark measured 17.33 ns / 48 B typed and 23.06 ns / 48 B expression; rewiring measured 30.23 ns / 48 B typed and 39.11 ns / 48 B expression. The post-change rows therefore show approximately 49% faster typed leaf delivery, 28% faster expression leaf delivery, 34% faster typed rewiring, and 22% faster expression rewiring. Typed notification allocation fell from 48 B to 24 B in both cases.
 
 List all cases without running them:
 
