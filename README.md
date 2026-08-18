@@ -61,6 +61,19 @@ using var subscription = viewModel.WhenAnyValue(x => x.Address!.City)
 
 Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact single-property expressions cache their resolved metadata and use a bound getter with the same specialized sink as typed paths, so steady-state notifications do not reflect. Other compatible expression shapes use the general reflected path engine. Use typed paths in trimming or NativeAOT applications.
 
+ReactiveUI-compatible direct property-name and single-property selector overloads are available for migration code as well. Property-name metadata is cached, and direct selectors use a fused subscription rather than allocating a second observable pipeline:
+
+```csharp
+#pragma warning disable IL2026
+using var subscription = viewModel.WhenAnyValue<SearchViewModel, int, string>(
+    x => x.SearchText,
+    static text => text.Length).Subscribe(Console.WriteLine);
+
+using var byName = viewModel.WhenAnyValue<SearchViewModel, string>(nameof(SearchViewModel.SearchText))
+    .Subscribe(Console.WriteLine);
+#pragma warning restore IL2026
+```
+
 ## Current semantics
 
 - Emits the current value synchronously for each subscription.
@@ -69,7 +82,8 @@ Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact 
 - Suppresses output while an intermediate object is `null`; a `null` final value remains valid.
 - Applies final-value distinctness by default, including across temporarily invalid nested chains.
 - Supports custom equality comparers and disabling distinctness.
-- Supports typed and expression selector and tuple overloads from arity 2 through arity 12.
+- Supports a ReactiveUI-compatible single-property selector plus typed, expression, and string-name selector overloads through arity 12.
+- Supports typed, expression, and string-name tuple overloads from arity 2 through arity 12.
 - Accepts explicit notification adapters for custom events or `IObservable<string?>` change streams, including mixed object chains, without global registration.
 - Serializes model event handling and observer notification per subscription.
 - Detaches all handlers on disposal or terminal getter/selector error.
@@ -78,7 +92,7 @@ Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact 
 
 - [ReactiveUI 24 typed sample](samples/ProMvvm.Sample.ReactiveUI) uses generated ProMvvm descriptors with `ReactiveUI.Reactive` 24.0.0 and `ReactiveUI.SourceGenerators` 3.2.0.
 - [CommunityToolkit.Mvvm typed sample](samples/ProMvvm.Sample.CommunityToolkit) uses generated ProMvvm descriptors with `[ObservableProperty]` properties.
-- [ReactiveUI 24 expression sample](samples/ProMvvm.Sample.ReactiveUI.Expression) demonstrates direct, nested, selector, and tuple expression observations.
+- [ReactiveUI 24 expression sample](samples/ProMvvm.Sample.ReactiveUI.Expression) demonstrates direct, nested, fused single-selector, arity-2/3 selector, and tuple expression observations.
 - [CommunityToolkit.Mvvm expression sample](samples/ProMvvm.Sample.CommunityToolkit.Expression) demonstrates the same expression migration surface on Toolkit-generated properties.
 
 The typed samples are the trim-safe and NativeAOT-safe examples. The expression samples intentionally target ordinary JIT applications and keep the `RequiresUnreferencedCode` boundary visible at their call sites.
@@ -109,14 +123,14 @@ CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT sm
 
 ## Benchmarks
 
-The BenchmarkDotNet suite compares four paths under the same notification models:
+The BenchmarkDotNet suite compares typed, expression, and direct string-name ProMvvm paths with both ReactiveUI 24 distributions under the same notification models:
 
 1. ProMvvm typed/AOT paths.
 2. ProMvvm expression compatibility paths.
 3. ReactiveUI 24 core expression paths.
 4. ReactiveUI.Reactive 24 expression paths.
 
-It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), two- and three-segment hot start, nested leaf emission and rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
+It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, direct and projected string-name calls, fused single selectors, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), two- and three-segment hot start, nested leaf emission and rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
 
 ```bash
 dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release -- --filter '*'
@@ -126,6 +140,6 @@ See [benchmarks/README.md](benchmarks/README.md) for focused commands and measur
 
 ## Status and next parity work
 
-The current compatibility milestone includes generated arity-2-through-12 APIs and specialized sinks, generated property descriptors, explicit notification adapters, two- and three-segment specialization, inherited-property expression fast paths, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, and string/dynamic paths remain outside the current slice.
+The current compatibility milestone includes a fused arity-1 selector, generated arity-2-through-12 expression/string APIs and specialized sinks, cached direct string-name observation, generated property descriptors, explicit notification adapters, two- and three-segment specialization, inherited-property expression fast paths, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, arbitrary dynamic paths, and expression indexers remain outside the current slice.
 
 The compatibility namespace is `ProMvvm`, so both libraries may be referenced during gradual migration. The explicit getter + property-name overload also avoids extension ambiguity when `ReactiveUI.Reactive` is imported.
