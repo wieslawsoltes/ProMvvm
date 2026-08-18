@@ -6,6 +6,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/ProMvvm.Tests/ProMvvm.Tests.csproj" />
     <Project Path="tests/ProMvvm.IntegrationTests/ProMvvm.IntegrationTests.csproj" />
+    <Project Path="tests/ProMvvm.ReactiveUiCoreIntegrationTests/ProMvvm.ReactiveUiCoreIntegrationTests.csproj" />
     <Project Path="tests/ProMvvm.SourceGenerators.Tests/ProMvvm.SourceGenerators.Tests.csproj" />
     <Project Path="tests/ProMvvm.AotSmoke/ProMvvm.AotSmoke.csproj" />
   </Folder>

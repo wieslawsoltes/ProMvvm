@@ -25,6 +25,7 @@ jobs:
       - run: dotnet test tests/ProMvvm.Tests -c Release --no-build
       - run: dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release --no-build
       - run: dotnet test tests/ProMvvm.IntegrationTests -c Release --no-build
+      - run: dotnet test tests/ProMvvm.ReactiveUiCoreIntegrationTests -c Release --no-build
       - if: runner.os == 'Linux'
         run: >-
           dotnet test tests/ProMvvm.Tests -c Release --no-build
