@@ -20,8 +20,22 @@ public class ConstructionBenchmarks : BenchmarkConfig
 #pragma warning restore IL2026
 
     [Benchmark]
+#pragma warning disable IL2026
+    public IObservable<int> ProMvvmString() =>
+        _model.WhenAnyValue<BenchmarkModel, int>(nameof(BenchmarkModel.Value));
+#pragma warning restore IL2026
+
+    [Benchmark]
     public IObservable<int> ReactiveUiReactive() => ReactiveUiReactiveBenchmarkAdapter.Value(_model);
 
     [Benchmark]
     public IObservable<int> ReactiveUiCore() => ReactiveUiCoreBenchmarkAdapter.Value(_model);
+
+    [Benchmark]
+    public IObservable<int> ReactiveUiReactiveString() =>
+        ReactiveUiReactiveBenchmarkAdapter.ValueByName(_model);
+
+    [Benchmark]
+    public IObservable<int> ReactiveUiCoreString() =>
+        ReactiveUiCoreBenchmarkAdapter.ValueByName(_model);
 }

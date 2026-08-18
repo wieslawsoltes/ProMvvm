@@ -31,10 +31,26 @@ public class HotStartBenchmarks : BenchmarkConfig
 #pragma warning restore IL2026
 
     [Benchmark]
+#pragma warning disable IL2026
+    public void ProMvvmString() =>
+        _model.WhenAnyValue<BenchmarkModel, int>(nameof(BenchmarkModel.Value))
+            .Subscribe(_observer)
+            .Dispose();
+#pragma warning restore IL2026
+
+    [Benchmark]
     public void ReactiveUiCore() =>
         ReactiveUiCoreBenchmarkAdapter.Value(_model).Subscribe(_observer).Dispose();
 
     [Benchmark]
     public void ReactiveUiReactive() =>
         ReactiveUiReactiveBenchmarkAdapter.Value(_model).Subscribe(_observer).Dispose();
+
+    [Benchmark]
+    public void ReactiveUiCoreString() =>
+        ReactiveUiCoreBenchmarkAdapter.ValueByName(_model).Subscribe(_observer).Dispose();
+
+    [Benchmark]
+    public void ReactiveUiReactiveString() =>
+        ReactiveUiReactiveBenchmarkAdapter.ValueByName(_model).Subscribe(_observer).Dispose();
 }

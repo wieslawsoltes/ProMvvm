@@ -6,8 +6,8 @@ All benchmarks use BenchmarkDotNet, .NET 10, the same hand-written `INotifyPrope
 
 | Area | Work measured | Compared implementations |
 |---|---|---|
-| Construction | Create a cold observable without subscribing | typed path, typed getter, expression, ReactiveUI core, ReactiveUI.Reactive |
-| Hot start | Create a warmed observable, subscribe, receive its initial value, and dispose | typed path, typed getter, generated descriptor, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Construction | Create a cold observable without subscribing | typed path, typed getter, expression, direct string name, ReactiveUI core, ReactiveUI.Reactive |
+| Hot start | Create a warmed observable, subscribe, receive its initial value, and dispose | typed path, typed getter, generated descriptor, expression, direct string name, ReactiveUI core, ReactiveUI.Reactive |
 | Subscription | Subscribe, receive initial value, dispose | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Leaf emission | One already-subscribed property change | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Burst | 1, 100, or 10,000 property changes | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
@@ -18,6 +18,8 @@ All benchmarks use BenchmarkDotNet, .NET 10, the same hand-written `INotifyPrope
 | Three-segment leaf | Change a leaf on an established three-segment chain | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Three-segment rewire | Replace the final parent and rewire only the affected suffix | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Multi-property | Change one input of an arity-2 selector | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Single selector | Project one expression/string property during hot start or an established change | expression and string APIs in ProMvvm, ReactiveUI core, and ReactiveUI.Reactive |
+| Direct string name | Construct, hot-start, or notify one public property resolved by name | ProMvvm, ReactiveUI core, ReactiveUI.Reactive |
 | Arity-12 emission | Notify twelve subscribed inputs and project each latest set | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Arity-12 hot start | Create, subscribe, synchronously initialize twelve inputs, and dispose | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Notification adapter | Change one property through direct INPC or the explicit INPC adapter | direct INPC, explicit adapter |
@@ -30,10 +32,10 @@ Measured on 2026-08-18 with BenchmarkDotNet 0.15.8, .NET 10.0.5, macOS 26.6, and
 
 | Scenario | ProMvvm typed | ProMvvm expression | ReactiveUI core | ReactiveUI.Reactive |
 |---|---:|---:|---:|---:|
-| Cold construction | 7.580 ns / 56 B (path); 6.596 ns / 56 B (getter) | 191.180 ns / 616 B | 214.658 ns / 712 B | 214.934 ns / 712 B |
-| Hot start | 41.51 ns / 232 B (path); 33.15 ns / 176 B (getter); 41.45 ns / 232 B (generated) | 218.75 ns / 792 B | 325.76 ns / 1,440 B | 327.12 ns / 1,440 B |
+| Cold construction | 7.128 ns / 56 B (path); 6.220 ns / 56 B (getter) | 180.445 ns / 616 B | 201.745 ns / 712 B | 197.418 ns / 712 B |
+| Hot start | 42.10 ns / 232 B (path); 33.40 ns / 176 B (getter); 41.42 ns / 232 B (generated) | 222.79 ns / 792 B | 331.54 ns / 1,440 B | 333.16 ns / 1,440 B |
 | Subscribe + initial value + dispose | 35.37 ns / 176 B | 38.31 ns / 176 B | 126.97 ns / 728 B | 132.56 ns / 728 B |
-| Single emission | 8.783 ns / 24 B | 11.264 ns / 24 B | 29.214 ns / 88 B | 29.234 ns / 88 B |
+| Single emission | 8.413 ns / 24 B | 10.261 ns / 24 B | 27.458 ns / 88 B | 27.490 ns / 88 B |
 | Burst: 1 change | 9.565 ns / 24 B | 11.200 ns / 24 B | 24.933 ns / 48 B | 25.083 ns / 48 B |
 | Burst: 100 changes | 0.974 us / 2,400 B | 1.173 us / 2,400 B | 3.035 us / 8,800 B | 2.929 us / 8,800 B |
 | Burst: 10,000 changes | 99.014 us / 240,000 B | 117.010 us / 240,000 B | 293.277 us / 880,000 B | 292.396 us / 880,000 B |
@@ -46,6 +48,20 @@ Measured on 2026-08-18 with BenchmarkDotNet 0.15.8, .NET 10.0.5, macOS 26.6, and
 | Three-segment hot start | 84.81 ns / 472 B | 424.30 ns / 1,392 B | 880.31 ns / 2,864 B | 882.81 ns / 2,864 B |
 | Three-segment leaf change | 8.796 ns / 24 B | 16.655 ns / 48 B | 29.244 ns / 88 B | 28.998 ns / 88 B |
 | Three-segment rewire | 20.055 ns / 24 B | 30.511 ns / 48 B | 109.761 ns / 376 B | 106.872 ns / 376 B |
+
+The compatibility additions use separate rows because the typed column has no reflection-based string-name equivalent. These were measured in the same post-optimization run and environment:
+
+| Scenario | ProMvvm | ReactiveUI core | ReactiveUI.Reactive |
+|---|---:|---:|---:|
+| Direct string cold construction | 8.250 ns / 56 B | 87.511 ns / 240 B | 88.096 ns / 240 B |
+| Direct string hot start | 45.55 ns / 232 B | 159.82 ns / 616 B | 158.87 ns / 616 B |
+| Direct string emission | 8.969 ns / 24 B | 23.08 ns / 88 B | 22.61 ns / 88 B |
+| Expression single-selector hot start | 214.18 ns / 808 B | 331.07 ns / 1,528 B | 328.91 ns / 1,528 B |
+| Expression single-selector emission | 10.337 ns / 24 B | 27.794 ns / 88 B | 27.699 ns / 88 B |
+| String single-selector hot start | 43.88 ns / 248 B | 154.86 ns / 616 B | 158.74 ns / 616 B |
+| String single-selector emission | 9.248 ns / 24 B | 23.401 ns / 88 B | 22.310 ns / 88 B |
+
+The direct-property selector specialization was benchmark-driven. Before fusion, ProMvvm measured 270.08 ns / 872 B for the expression hot start and 71.23 ns / 312 B for the string hot start. The retained specialization reduced those to 214.18 ns / 808 B (about 20.7% faster) and 43.88 ns / 248 B (about 38.4% faster), while the post-change steady-state rows remained at the model event's 24-byte allocation floor.
 
 The explicit-adapter emission result is 8.330 ns / 24 B versus 8.344 ns / 24 B for direct INPC, which is indistinguishable at this measurement resolution.
 

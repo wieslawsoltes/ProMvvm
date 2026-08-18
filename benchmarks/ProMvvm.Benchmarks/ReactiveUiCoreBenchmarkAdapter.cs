@@ -12,6 +12,21 @@ internal static class ReactiveUiCoreBenchmarkAdapter
     public static IObservable<int> Value(BenchmarkModel model) =>
         ReactiveUI.WhenAnyMixins.WhenAnyValue(model, value => value.Value);
 
+    public static IObservable<int> ValueByName(BenchmarkModel model) =>
+        ReactiveUI.WhenAnyMixins.WhenAnyValue<BenchmarkModel, int>(model, nameof(BenchmarkModel.Value));
+
+    public static IObservable<int> SelectedValue(BenchmarkModel model) =>
+        ReactiveUI.WhenAnyMixins.WhenAnyValue(
+            model,
+            value => value.Value,
+            (Func<int, int>)(static value => value));
+
+    public static IObservable<int> SelectedValueByName(BenchmarkModel model) =>
+        ReactiveUI.WhenAnyMixins.WhenAnyValue<BenchmarkModel, int, int>(
+            model,
+            nameof(BenchmarkModel.Value),
+            static value => value);
+
     public static IObservable<int> ChildValue(BenchmarkModel model) =>
         ReactiveUI.WhenAnyMixins.WhenAnyValue(model, value => value.Child!.Value);
 
