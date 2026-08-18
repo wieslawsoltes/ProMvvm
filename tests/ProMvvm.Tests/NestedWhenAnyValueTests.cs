@@ -8,6 +8,13 @@ public sealed class NestedWhenAnyValueTests
                 static model => model.Child)
             .Then(nameof(ObservableModel.Name), static child => child!.Name);
 
+    private static readonly PropertyPath<ObservableModel, string?> DeepNamePath =
+        PropertyPath.Create<ObservableModel, ObservableModel?>(
+                nameof(ObservableModel.Child),
+                static model => model.Child)
+            .Then(nameof(ObservableModel.Child), static child => child!.Child)
+            .Then(nameof(ObservableModel.Name), static child => child!.Name);
+
     [Fact]
     public void TracksLeafAndRewiresWhenIntermediateChanges()
     {
@@ -135,5 +142,73 @@ public sealed class NestedWhenAnyValueTests
 
         Assert.Equal(0, model.SubscriberCount);
         Assert.Equal(0, child.SubscriberCount);
+    }
+
+    [Fact]
+    public void GeneralThreeSegmentPathTracksAndRewiresOnlyItsSuffix()
+    {
+        var oldLeaf = new ObservableModel { Name = "old" };
+        var middle = new ObservableModel { Child = oldLeaf };
+        var root = new ObservableModel { Child = middle };
+        var values = new List<string?>();
+        var subscription = root.WhenAnyValue(DeepNamePath).Subscribe(values.Add);
+
+        root.Raise(nameof(ObservableModel.Count));
+        oldLeaf.Name = "changed";
+        var newLeaf = new ObservableModel { Name = "new" };
+        middle.Child = newLeaf;
+        oldLeaf.Name = "ignored";
+        middle.Child = null;
+        middle.Child = newLeaf;
+
+        subscription.Dispose();
+        subscription.Dispose();
+
+        Assert.Equal(["old", "changed", "new"], values);
+        Assert.Equal(0, root.SubscriberCount);
+        Assert.Equal(0, middle.SubscriberCount);
+        Assert.Equal(0, oldLeaf.SubscriberCount);
+        Assert.Equal(0, newLeaf.SubscriberCount);
+    }
+
+    [Fact]
+    public void GeneralThreeSegmentFailuresStopAllWatchers()
+    {
+        var leaf = new ObservableModel { Name = "value" };
+        var middle = new ObservableModel { Child = leaf };
+        var root = new ObservableModel { Child = middle };
+
+        Assert.Throws<TestObserverException>(() =>
+            root.WhenAnyValue(DeepNamePath).Subscribe(new ThrowingObserver<string?>()));
+
+        var throwingPath = PropertyPath.Create<ObservableModel, ObservableModel?>(
+                nameof(ObservableModel.Child), static value => value.Child)
+            .Then(nameof(ObservableModel.Child), static value => value!.Child)
+            .Then(nameof(ObservableModel.Throwing), static value => value!.Throwing);
+        Exception? error = null;
+        using var subscription = root.WhenAnyValue(throwingPath)
+            .Subscribe(_ => { }, value => error = value);
+
+        Assert.IsType<InvalidOperationException>(error);
+        Assert.Equal(0, root.SubscriberCount);
+        Assert.Equal(0, middle.SubscriberCount);
+        Assert.Equal(0, leaf.SubscriberCount);
+    }
+
+    [Fact]
+    public void TwoSegmentRootGetterFailureIsReported()
+    {
+        var model = new ObservableModel();
+        var path = PropertyPath.Create<ObservableModel, ObservableModel?>(
+                nameof(ObservableModel.Child),
+                static _ => throw new InvalidOperationException("root getter"))
+            .Then(nameof(ObservableModel.Name), static value => value!.Name);
+        Exception? error = null;
+
+        using var subscription = model.WhenAnyValue(path)
+            .Subscribe(_ => { }, value => error = value);
+
+        Assert.IsType<InvalidOperationException>(error);
+        Assert.Equal(0, model.SubscriberCount);
     }
 }

@@ -67,6 +67,23 @@ public sealed class ExpressionCompatibilityTests
     }
 
     [Fact]
+    public void ReusesAndAlternatesCachedTwoPropertyPaths()
+    {
+        var model = new ObservableModel
+        {
+            Child = new ObservableModel { Count = 4 },
+        };
+
+        using var count = model.WhenAnyValue(value => value.Child!.Count).Subscribe(_ => { });
+        using var subscribers = model.WhenAnyValue(value => value.Child!.SubscriberCount).Subscribe(_ => { });
+        using var cachedSubscribers = model.WhenAnyValue(value => value.Child!.SubscriberCount).Subscribe(_ => { });
+        using var cachedCount = model.WhenAnyValue(value => value.Child!.Count).Subscribe(_ => { });
+
+        Assert.Equal(4, model.SubscriberCount);
+        Assert.Equal(4, model.Child!.SubscriberCount);
+    }
+
+    [Fact]
     public void ObservesFieldExpression()
     {
         var model = new FieldModel { Value = 1 };

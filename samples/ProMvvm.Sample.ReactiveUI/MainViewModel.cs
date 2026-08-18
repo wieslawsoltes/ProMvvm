@@ -3,6 +3,7 @@ using RxReactiveObject = ReactiveUI.Reactive.ReactiveObject;
 
 namespace ProMvvm.Sample.ReactiveUI;
 
+[ProMvvm.GeneratePropertyPaths]
 public sealed partial class MainViewModel : RxReactiveObject
 {
     [Reactive]

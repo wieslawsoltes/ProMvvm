@@ -60,6 +60,24 @@ public sealed class CombineLatestObservableTests
         Assert.IsType<TestSourceException>(observer.ErrorValue);
     }
 
+    [Fact]
+    public void ObserverFailureStopsAndDisposesBothSources()
+    {
+        var first = new ControlledObservable<int>();
+        var second = new ControlledObservable<int>();
+        var observable = Create(first, second);
+        var subscription = observable.Subscribe(new ThrowingObserver<int>());
+
+        first.Next(1);
+        Assert.Throws<TestObserverException>(() => second.Next(2));
+        second.Next(3);
+        subscription.Dispose();
+        subscription.Dispose();
+
+        Assert.True(first.IsDisposed);
+        Assert.True(second.IsDisposed);
+    }
+
     private static CombineLatestObservable<int, int, int> Create(
         IObservable<int> first,
         IObservable<int> second) => new(

@@ -3,6 +3,7 @@ using System.Reactive.Linq;
 
 namespace ProMvvm.IntegrationTests;
 
+[GeneratePropertyPaths]
 public sealed partial class ToolkitViewModel : ObservableObject
 {
     [ObservableProperty]
@@ -20,9 +21,7 @@ public sealed class CommunityToolkitIntegrationTests
         var model = new ToolkitViewModel();
         var values = new List<string>();
 
-        using var subscription = model.WhenAnyValue(
-                static value => value.Name,
-                nameof(ToolkitViewModel.Name))
+        using var subscription = model.WhenAnyValue(ToolkitViewModelPropertyPaths.Name)
             .Select(static value => value.ToUpperInvariant())
             .Subscribe(values.Add);
 
@@ -35,15 +34,11 @@ public sealed class CommunityToolkitIntegrationTests
     public void MultipleGeneratedPropertiesCanBeProjected()
     {
         var model = new ToolkitViewModel();
-        var name = PropertyPath.Create<ToolkitViewModel, string>(
-            nameof(ToolkitViewModel.Name), static value => value.Name);
-        var count = PropertyPath.Create<ToolkitViewModel, int>(
-            nameof(ToolkitViewModel.Count), static value => value.Count);
         var values = new List<string>();
 
         using var subscription = model.WhenAnyValue(
-            name,
-            count,
+            ToolkitViewModelPropertyPaths.Name,
+            ToolkitViewModelPropertyPaths.Count,
             static (currentName, currentCount) => $"{currentName}:{currentCount}")
             .Subscribe(values.Add);
 

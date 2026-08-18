@@ -9,5 +9,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/ProMvvm/ProMvvm.csproj" />
+    <ProjectReference Include="../../src/ProMvvm.SourceGenerators/ProMvvm.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      GlobalPropertiesToRemove="PublishAot;PublishTrimmed;TrimMode;SelfContained;RuntimeIdentifier"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

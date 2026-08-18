@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ProMvvm/ProMvvm.csproj" />
+    <Project Path="src/ProMvvm.SourceGenerators/ProMvvm.SourceGenerators.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ProMvvm.Tests/ProMvvm.Tests.csproj" />
     <Project Path="tests/ProMvvm.IntegrationTests/ProMvvm.IntegrationTests.csproj" />
+    <Project Path="tests/ProMvvm.SourceGenerators.Tests/ProMvvm.SourceGenerators.Tests.csproj" />
     <Project Path="tests/ProMvvm.AotSmoke/ProMvvm.AotSmoke.csproj" />
   </Folder>
   <Folder Name="/samples/">

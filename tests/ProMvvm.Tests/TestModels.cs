@@ -6,26 +6,34 @@ namespace ProMvvm.Tests;
 internal sealed class ObservableModel : INotifyPropertyChanged
 {
     private PropertyChangedEventHandler? _propertyChanged;
+    private readonly object _eventGate = new();
     private string? _name;
     private int _count;
+    private int _subscriberCount;
     private ObservableModel? _child;
 
     public event PropertyChangedEventHandler? PropertyChanged
     {
         add
         {
-            _propertyChanged += value;
-            SubscriberCount++;
+            lock (_eventGate)
+            {
+                _propertyChanged += value;
+                _subscriberCount++;
+            }
         }
 
         remove
         {
-            _propertyChanged -= value;
-            SubscriberCount--;
+            lock (_eventGate)
+            {
+                _propertyChanged -= value;
+                _subscriberCount--;
+            }
         }
     }
 
-    public int SubscriberCount { get; private set; }
+    public int SubscriberCount => Volatile.Read(ref _subscriberCount);
 
     public string? Name
     {
@@ -49,8 +57,16 @@ internal sealed class ObservableModel : INotifyPropertyChanged
         ? throw new InvalidOperationException("getter failed")
         : string.Empty;
 
-    public void Raise(string? propertyName) =>
-        _propertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    public void Raise(string? propertyName)
+    {
+        PropertyChangedEventHandler? handler;
+        lock (_eventGate)
+        {
+            handler = _propertyChanged;
+        }
+
+        handler?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 
     public string GetName() => Name ?? string.Empty;
 

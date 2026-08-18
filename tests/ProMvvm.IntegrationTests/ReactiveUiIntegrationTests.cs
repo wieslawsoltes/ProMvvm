@@ -5,6 +5,7 @@ using RxReactiveObject = ReactiveUI.Reactive.ReactiveObject;
 
 namespace ProMvvm.IntegrationTests;
 
+[GeneratePropertyPaths]
 public sealed partial class ReactiveViewModel : RxReactiveObject
 {
     [Reactive]
@@ -22,9 +23,7 @@ public sealed class ReactiveUiIntegrationTests
         var model = new ReactiveViewModel();
         var values = new List<string>();
 
-        using var subscription = model.WhenAnyValue(
-                static value => value.Name,
-                nameof(ReactiveViewModel.Name))
+        using var subscription = model.WhenAnyValue(ReactiveViewModelPropertyPaths.Name)
             .Select(static value => value.ToUpperInvariant())
             .Subscribe(values.Add);
 
@@ -40,9 +39,8 @@ public sealed class ReactiveUiIntegrationTests
         var proValues = new List<int>();
         var reactiveUiValues = new List<int>();
 
-        using var proSubscription = model.WhenAnyValue(
-            static value => value.Count,
-            nameof(ReactiveViewModel.Count)).Subscribe(proValues.Add);
+        using var proSubscription = model.WhenAnyValue(ReactiveViewModelPropertyPaths.Count)
+            .Subscribe(proValues.Add);
 
         using var reactiveUiSubscription = ReactiveUiAdapter.ObserveCount(model)
             .Subscribe(reactiveUiValues.Add);

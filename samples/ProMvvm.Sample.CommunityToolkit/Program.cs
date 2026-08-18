@@ -5,9 +5,7 @@ using System.Reactive.Linq;
 
 var viewModel = new MainViewModel();
 
-using var subscription = viewModel.WhenAnyValue(
-        static model => model.SearchText,
-        nameof(MainViewModel.SearchText))
+using var subscription = viewModel.WhenAnyValue(MainViewModelPropertyPaths.SearchText)
     .Where(static text => !string.IsNullOrWhiteSpace(text))
     .Select(static text => $"Searching for '{text}'")
     .Subscribe(Console.WriteLine);

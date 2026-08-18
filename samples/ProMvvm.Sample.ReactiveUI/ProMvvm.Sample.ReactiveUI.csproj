@@ -5,6 +5,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/ProMvvm/ProMvvm.csproj" />
+    <ProjectReference Include="../../src/ProMvvm.SourceGenerators/ProMvvm.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      GlobalPropertiesToRemove="PublishAot;PublishTrimmed;TrimMode;SelfContained;RuntimeIdentifier"
+                      ReferenceOutputAssembly="false" />
     <PackageReference Include="ReactiveUI.Reactive" />
     <PackageReference Include="ReactiveUI.SourceGenerators" PrivateAssets="all" />
     <PackageReference Include="System.Reactive" />

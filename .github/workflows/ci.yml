@@ -10,7 +10,12 @@ permissions:
 
 jobs:
   verify:
-    runs-on: macos-15
+    name: Verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -18,18 +23,96 @@ jobs:
           dotnet-version: 10.0.201
       - run: dotnet build ProMvvm.slnx -c Release
       - run: dotnet test tests/ProMvvm.Tests -c Release --no-build
+      - run: dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release --no-build
       - run: dotnet test tests/ProMvvm.IntegrationTests -c Release --no-build
+      - if: runner.os == 'Linux'
+        run: >-
+          dotnet test tests/ProMvvm.Tests -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory artifacts/coverage
       - run: dotnet run --project samples/ProMvvm.Sample.ReactiveUI -c Release --no-build
       - run: dotnet run --project samples/ProMvvm.Sample.CommunityToolkit -c Release --no-build
-      - run: dotnet publish tests/ProMvvm.AotSmoke -c Release -r osx-arm64 --self-contained -o artifacts/aot
-      - run: ./artifacts/aot/ProMvvm.AotSmoke
-      - run: dotnet publish samples/ProMvvm.Sample.ReactiveUI -c Release -r osx-arm64 --self-contained -p:PublishAot=true -o artifacts/aot-reactiveui
-      - run: ./artifacts/aot-reactiveui/ProMvvm.Sample.ReactiveUI
-      - run: dotnet publish samples/ProMvvm.Sample.CommunityToolkit -c Release -r osx-arm64 --self-contained -p:PublishAot=true -o artifacts/aot-toolkit
-      - run: ./artifacts/aot-toolkit/ProMvvm.Sample.CommunityToolkit
-      - run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages
       - run: dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release --no-build -- --list flat
-      - uses: actions/upload-artifact@v4
+      - if: runner.os == 'Linux'
+        run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: artifacts/coverage
+
+  trimmed:
+    name: Full trim (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            rid: linux-x64
+            executable: ./artifacts/trim/ProMvvm.AotSmoke
+          - os: windows-2025
+            rid: win-x64
+            executable: ./artifacts/trim/ProMvvm.AotSmoke.exe
+          - os: macos-15
+            rid: osx-arm64
+            executable: ./artifacts/trim/ProMvvm.AotSmoke
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.201
+      - run: >-
+          dotnet publish tests/ProMvvm.AotSmoke -c Release
+          -r ${{ matrix.rid }} --self-contained
+          -p:PublishAot=false -p:PublishTrimmed=true -p:TrimMode=full
+          -o artifacts/trim
+      - run: ${{ matrix.executable }}
+        shell: bash
+
+  native-aot:
+    name: NativeAOT (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            rid: linux-x64
+            executable: ./artifacts/aot/ProMvvm.AotSmoke
+          - os: windows-2025
+            rid: win-x64
+            executable: ./artifacts/aot/ProMvvm.AotSmoke.exe
+          - os: macos-15
+            rid: osx-arm64
+            executable: ./artifacts/aot/ProMvvm.AotSmoke
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.201
+      - run: >-
+          dotnet publish tests/ProMvvm.AotSmoke -c Release
+          -r ${{ matrix.rid }} --self-contained
+          -o artifacts/aot
+      - run: ${{ matrix.executable }}
+        shell: bash
+
+  native-aot-framework-samples:
+    name: NativeAOT framework samples
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.201
+      - run: >-
+          dotnet publish samples/ProMvvm.Sample.ReactiveUI -c Release
+          -r osx-arm64 --self-contained -p:PublishAot=true
+          -o artifacts/aot-reactiveui
+      - run: ./artifacts/aot-reactiveui/ProMvvm.Sample.ReactiveUI
+      - run: >-
+          dotnet publish samples/ProMvvm.Sample.CommunityToolkit -c Release
+          -r osx-arm64 --self-contained -p:PublishAot=true
+          -o artifacts/aot-toolkit
+      - run: ./artifacts/aot-toolkit/ProMvvm.Sample.CommunityToolkit
