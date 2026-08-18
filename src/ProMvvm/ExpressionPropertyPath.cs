@@ -29,6 +29,25 @@ internal static class ExpressionPropertyPath
             return SinglePropertyCache<TSource, TValue>.GetOrAdd(memberProperty);
         }
 
+        if (body is MemberExpression
+            {
+                Member: PropertyInfo leafProperty,
+                Expression: MemberExpression
+                {
+                    Member: PropertyInfo rootProperty,
+                    Expression: { } rootTarget,
+                },
+            } &&
+            StripConvert(rootTarget) == expression.Parameters[0] &&
+            rootProperty.DeclaringType == typeof(TSource) &&
+            rootProperty.GetMethod is { IsStatic: false } &&
+            leafProperty.DeclaringType == rootProperty.PropertyType &&
+            leafProperty.PropertyType == typeof(TValue) &&
+            leafProperty.GetMethod is { IsStatic: false })
+        {
+            return TwoPropertyCache<TSource, TValue>.GetOrAdd(rootProperty, leafProperty);
+        }
+
         var members = new Stack<MemberInfo>();
         Expression? current = body;
         while (current is MemberExpression memberExpression)
@@ -58,9 +77,9 @@ internal static class ExpressionPropertyPath
     private static Expression? StripConvert(Expression? expression)
     {
         while (expression is UnaryExpression
-               {
-                   NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked,
-               } unary)
+            {
+                NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked,
+            } unary)
         {
             expression = unary.Operand;
         }
@@ -113,6 +132,56 @@ internal static class ExpressionPropertyPath
             PropertyPath<TSource, TValue> path)
         {
             public PropertyInfo Property { get; } = property;
+
+            public PropertyPath<TSource, TValue> Path { get; } = path;
+        }
+    }
+
+    private static class TwoPropertyCache<TSource, TValue>
+        where TSource : class
+    {
+        private static readonly ConcurrentDictionary<(PropertyInfo Root, PropertyInfo Leaf), CacheEntry> Paths = new();
+        private static CacheEntry? _lastEntry;
+
+        public static PropertyPath<TSource, TValue> GetOrAdd(
+            PropertyInfo rootProperty,
+            PropertyInfo leafProperty)
+        {
+            var lastEntry = Volatile.Read(ref _lastEntry);
+            if (lastEntry is not null &&
+                ReferenceEquals(lastEntry.RootProperty, rootProperty) &&
+                ReferenceEquals(lastEntry.LeafProperty, leafProperty))
+            {
+                return lastEntry.Path;
+            }
+
+            var entry = Paths.GetOrAdd(
+                (rootProperty, leafProperty),
+                static properties => new CacheEntry(
+                    properties.Root,
+                    properties.Leaf,
+                    CreatePath(properties.Root, properties.Leaf)));
+
+            Volatile.Write(ref _lastEntry, entry);
+            return entry.Path;
+        }
+
+        private static PropertyPath<TSource, TValue> CreatePath(
+            PropertyInfo rootProperty,
+            PropertyInfo leafProperty) => PropertyPath<TSource, TValue>.FromTwo<object?>(
+            rootProperty.Name,
+            source => rootProperty.GetValue(source),
+            leafProperty.Name,
+            intermediate => (TValue)leafProperty.GetValue(intermediate!)!);
+
+        private sealed class CacheEntry(
+            PropertyInfo rootProperty,
+            PropertyInfo leafProperty,
+            PropertyPath<TSource, TValue> path)
+        {
+            public PropertyInfo RootProperty { get; } = rootProperty;
+
+            public PropertyInfo LeafProperty { get; } = leafProperty;
 
             public PropertyPath<TSource, TValue> Path { get; } = path;
         }

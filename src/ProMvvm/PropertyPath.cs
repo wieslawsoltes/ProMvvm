@@ -16,15 +16,18 @@ public sealed class PropertyPath<TSource, TValue>
     private readonly ImmutableArray<IPropertyPathSegment> _segments;
     private readonly string? _singlePropertyName;
     private readonly Func<TSource, TValue>? _singleGetter;
+    private readonly IPropertyPathObservableFactory<TSource, TValue>? _specializedFactory;
 
     private PropertyPath(
         ImmutableArray<IPropertyPathSegment> segments,
         string? singlePropertyName = null,
-        Func<TSource, TValue>? singleGetter = null)
+        Func<TSource, TValue>? singleGetter = null,
+        IPropertyPathObservableFactory<TSource, TValue>? specializedFactory = null)
     {
         _segments = segments;
         _singlePropertyName = singlePropertyName;
         _singleGetter = singleGetter;
+        _specializedFactory = specializedFactory;
     }
 
     internal ImmutableArray<IPropertyPathSegment> Segments => _segments;
@@ -39,6 +42,21 @@ public sealed class PropertyPath<TSource, TValue>
         propertyName,
         getter);
 
+    internal static PropertyPath<TSource, TValue> FromTwo<TIntermediate>(
+        string propertyName1,
+        Func<TSource, TIntermediate> getter1,
+        string propertyName2,
+        Func<TIntermediate, TValue> getter2) => new(
+        [
+            new PropertyPathSegment<TSource, TIntermediate>(propertyName1, getter1),
+            new PropertyPathSegment<TIntermediate, TValue>(propertyName2, getter2),
+        ],
+        specializedFactory: new TwoSegmentObservableFactory<TSource, TIntermediate, TValue>(
+            propertyName1,
+            getter1,
+            propertyName2,
+            getter2));
+
     internal bool TryGetSingle(
         [NotNullWhen(true)] out string? propertyName,
         [NotNullWhen(true)] out Func<TSource, TValue>? getter)
@@ -46,6 +64,16 @@ public sealed class PropertyPath<TSource, TValue>
         propertyName = _singlePropertyName;
         getter = _singleGetter;
         return getter is not null;
+    }
+
+    internal bool TryCreateSpecializedObservable(
+        TSource source,
+        bool isDistinct,
+        IEqualityComparer<TValue> comparer,
+        [NotNullWhen(true)] out IObservable<TValue>? observable)
+    {
+        observable = _specializedFactory?.Create(source, isDistinct, comparer);
+        return observable is not null;
     }
 
     /// <summary>Appends a child property to this path.</summary>
@@ -57,9 +85,47 @@ public sealed class PropertyPath<TSource, TValue>
         ArgumentException.ThrowIfNullOrWhiteSpace(propertyName);
         ArgumentNullException.ThrowIfNull(getter);
 
+        if (TryGetSingle(out var rootPropertyName, out var rootGetter))
+        {
+            return PropertyPath<TSource, TNext>.FromTwo(
+                rootPropertyName,
+                rootGetter,
+                propertyName,
+                getter);
+        }
+
         return new PropertyPath<TSource, TNext>(
             _segments.Add(new PropertyPathSegment<TValue, TNext>(propertyName, getter)));
     }
+}
+
+internal interface IPropertyPathObservableFactory<TSource, TValue>
+    where TSource : class
+{
+    IObservable<TValue> Create(
+        TSource source,
+        bool isDistinct,
+        IEqualityComparer<TValue> comparer);
+}
+
+internal sealed class TwoSegmentObservableFactory<TSource, TIntermediate, TValue>(
+    string propertyName1,
+    Func<TSource, TIntermediate> getter1,
+    string propertyName2,
+    Func<TIntermediate, TValue> getter2) : IPropertyPathObservableFactory<TSource, TValue>
+    where TSource : class
+{
+    public IObservable<TValue> Create(
+        TSource source,
+        bool isDistinct,
+        IEqualityComparer<TValue> comparer) => new TwoSegmentPropertyObservable<TSource, TIntermediate, TValue>(
+        source,
+        propertyName1,
+        getter1,
+        propertyName2,
+        getter2,
+        isDistinct,
+        comparer);
 }
 
 internal interface IPropertyPathSegment

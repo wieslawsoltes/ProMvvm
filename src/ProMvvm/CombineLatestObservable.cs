@@ -36,7 +36,7 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
         {
             try
             {
-                var firstSubscription = first.Subscribe(new SourceObserver<T1>(this, 1));
+                var firstSubscription = first.Subscribe(new SourceObserver1(this));
                 lock (_gate)
                 {
                     if (_stopped)
@@ -51,7 +51,7 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
 
                 if (!_stopped)
                 {
-                    var secondSubscription = second.Subscribe(new SourceObserver<T2>(this, 2));
+                    var secondSubscription = second.Subscribe(new SourceObserver2(this));
                     lock (_gate)
                     {
                         if (_stopped)
@@ -76,20 +76,11 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
         {
             lock (_gate)
             {
-                if (_stopped)
-                {
-                    return;
-                }
-
-                _stopped = true;
-                _subscription1?.Dispose();
-                _subscription2?.Dispose();
-                _subscription1 = null;
-                _subscription2 = null;
+                Stop();
             }
         }
 
-        public void Next<T>(int sourceIndex, T value)
+        private void Next1(T1 value)
         {
             lock (_gate)
             {
@@ -98,41 +89,60 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
                     return;
                 }
 
-                if (sourceIndex == 1)
-                {
-                    _value1 = (T1?)(object?)value;
-                    _hasValue1 = true;
-                }
-                else
-                {
-                    _value2 = (T2?)(object?)value;
-                    _hasValue2 = true;
-                }
+                _value1 = value;
+                _hasValue1 = true;
+                Publish();
+            }
+        }
 
-                if (!_hasValue1 || !_hasValue2)
+        private void Next2(T2 value)
+        {
+            lock (_gate)
+            {
+                if (_stopped)
                 {
                     return;
                 }
 
-                TResult result;
-                try
-                {
-                    result = selector(_value1!, _value2!);
-                }
-                catch (Exception error)
-                {
-                    Error(error);
-                    return;
-                }
+                _value2 = value;
+                _hasValue2 = true;
+                Publish();
+            }
+        }
 
-                if (isDistinct && _hasLastResult && comparer.Equals(_lastResult!, result))
-                {
-                    return;
-                }
+        private void Publish()
+        {
+            if (!_hasValue1 || !_hasValue2)
+            {
+                return;
+            }
 
-                _lastResult = result;
-                _hasLastResult = true;
+            TResult result;
+            try
+            {
+                result = selector(_value1!, _value2!);
+            }
+            catch (Exception error)
+            {
+                Error(error);
+                return;
+            }
+
+            if (isDistinct && _hasLastResult && comparer.Equals(_lastResult!, result))
+            {
+                return;
+            }
+
+            _lastResult = result;
+            _hasLastResult = true;
+            try
+            {
                 observer.OnNext(result);
+            }
+            catch
+            {
+                Stop();
+                throw;
             }
         }
 
@@ -145,14 +155,26 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
                     return;
                 }
 
-                _stopped = true;
-                _subscription1?.Dispose();
-                _subscription2?.Dispose();
+                Stop();
                 observer.OnError(error);
             }
         }
 
-        private sealed class SourceObserver<T>(Subscription owner, int sourceIndex) : IObserver<T>
+        private void Stop()
+        {
+            if (_stopped)
+            {
+                return;
+            }
+
+            _stopped = true;
+            _subscription1?.Dispose();
+            _subscription2?.Dispose();
+            _subscription1 = null;
+            _subscription2 = null;
+        }
+
+        private sealed class SourceObserver1(Subscription owner) : IObserver<T1>
         {
             public void OnCompleted()
             {
@@ -160,7 +182,18 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
 
             public void OnError(Exception error) => owner.Error(error);
 
-            public void OnNext(T value) => owner.Next(sourceIndex, value);
+            public void OnNext(T1 value) => owner.Next1(value);
+        }
+
+        private sealed class SourceObserver2(Subscription owner) : IObserver<T2>
+        {
+            public void OnCompleted()
+            {
+            }
+
+            public void OnError(Exception error) => owner.Error(error);
+
+            public void OnNext(T2 value) => owner.Next2(value);
         }
     }
 }

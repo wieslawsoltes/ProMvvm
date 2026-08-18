@@ -8,13 +8,20 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
     TSource source,
     PropertyPath<TSource, TValue> path,
     bool isDistinct,
-    IEqualityComparer<TValue> comparer) : IObservable<TValue>
+    IEqualityComparer<TValue> comparer,
+    IPropertyNotificationAdapter? notificationAdapter = null) : IObservable<TValue>
     where TSource : class
 {
     public IDisposable Subscribe(IObserver<TValue> observer)
     {
         ArgumentNullException.ThrowIfNull(observer);
-        return new Subscription(source, path.Segments, observer, isDistinct, comparer);
+        return new Subscription(
+            source,
+            path.Segments,
+            observer,
+            isDistinct,
+            comparer,
+            notificationAdapter);
     }
 
     private sealed class Subscription : IDisposable
@@ -23,6 +30,7 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
         private readonly ImmutableArray<IPropertyPathSegment> _segments;
         private readonly IObserver<TValue> _observer;
         private readonly IEqualityComparer<TValue> _comparer;
+        private readonly IPropertyNotificationAdapter? _notificationAdapter;
         private readonly object?[] _values;
         private readonly Watcher[] _watchers;
         private bool _hasLastValue;
@@ -34,11 +42,13 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
             ImmutableArray<IPropertyPathSegment> segments,
             IObserver<TValue> observer,
             bool isDistinct,
-            IEqualityComparer<TValue> comparer)
+            IEqualityComparer<TValue> comparer,
+            IPropertyNotificationAdapter? notificationAdapter)
         {
             _segments = segments;
             _observer = observer;
             _comparer = comparer;
+            _notificationAdapter = notificationAdapter;
             IsDistinct = isDistinct;
             _values = new object?[segments.Length + 1];
             _watchers = new Watcher[segments.Length];
@@ -109,7 +119,7 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
 
                     if (index >= attachStart)
                     {
-                        _watchers[index].Attach(parent as INotifyPropertyChanged);
+                        _watchers[index].Attach(parent);
                     }
 
                     _values[index + 1] = _segments[index].GetValue(parent);
@@ -172,21 +182,42 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
             private readonly Subscription _owner;
             private readonly int _segmentIndex;
             private readonly PropertyChangedEventHandler _handler;
+            private readonly Action<string?> _adapterHandler;
             private INotifyPropertyChanged? _source;
+            private IDisposable? _adapterSubscription;
+            private bool _attaching;
 
             public Watcher(Subscription owner, int segmentIndex)
             {
                 _owner = owner;
                 _segmentIndex = segmentIndex;
                 _handler = HandlePropertyChanged;
+                _adapterHandler = HandleAdaptedPropertyChanged;
             }
 
-            public void Attach(INotifyPropertyChanged? source)
+            public void Attach(object source)
             {
-                _source = source;
-                if (source is not null)
+                if (_owner._notificationAdapter is not null)
                 {
-                    source.PropertyChanged += _handler;
+                    _attaching = true;
+                    try
+                    {
+                        _adapterSubscription = _owner._notificationAdapter.Subscribe(
+                            source,
+                            _adapterHandler);
+                    }
+                    finally
+                    {
+                        _attaching = false;
+                    }
+
+                    return;
+                }
+
+                _source = source as INotifyPropertyChanged;
+                if (_source is not null)
+                {
+                    _source.PropertyChanged += _handler;
                 }
             }
 
@@ -197,10 +228,21 @@ internal sealed class PropertyPathObservable<TSource, TValue>(
                     _source.PropertyChanged -= _handler;
                     _source = null;
                 }
+
+                _adapterSubscription?.Dispose();
+                _adapterSubscription = null;
             }
 
             private void HandlePropertyChanged(object? sender, PropertyChangedEventArgs args) =>
                 _owner.OnPropertyChanged(_segmentIndex, args.PropertyName);
+
+            private void HandleAdaptedPropertyChanged(string? propertyName)
+            {
+                if (!_attaching)
+                {
+                    _owner.OnPropertyChanged(_segmentIndex, propertyName);
+                }
+            }
         }
     }
 }
