@@ -387,6 +387,8 @@ ProMvvm observes behavior, not ancestry. A source only needs to be a class; chan
 
 The integration tests compile and execute both CommunityToolkit and ReactiveUI source-generator models, including ProMvvm descriptors generated from their annotated backing fields. The ReactiveUI integration also runs a ProMvvm observation and a ReactiveUI.Reactive observation on the same instance, demonstrating that the libraries can coexist during migration. Namespace aliases or the explicit typed getter overload avoid extension-method ambiguity at mixed call sites.
 
+Each framework has two executable samples. Its typed sample uses generated ProMvvm descriptors and participates in NativeAOT validation. Its expression sample demonstrates direct observation, cached two-segment rewiring, an arity-2 selector, and a tuple stream in an ordinary JIT application. Keeping these as separate projects makes the deployment contract explicit instead of suppressing trimming diagnostics across an otherwise AOT-safe sample.
+
 ## Trimming and NativeAOT boundary
 
 The runtime project targets .NET 10, enables the trim analyzer, declares itself trimmable and AOT-compatible, and has no runtime package references. The typed API contains only ordinary generic code, delegates, BCL collection types, and event subscriptions. The source generator is a build-time analyzer. The smoke project exercises generated descriptors, typed single and specialized nested paths, rewiring, arity 12, and a custom notification adapter. CI publishes and runs it with full trimming and NativeAOT on Linux x64, Windows x64, and macOS Arm64.

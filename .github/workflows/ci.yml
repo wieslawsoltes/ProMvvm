@@ -32,6 +32,8 @@ jobs:
           --results-directory artifacts/coverage
       - run: dotnet run --project samples/ProMvvm.Sample.ReactiveUI -c Release --no-build
       - run: dotnet run --project samples/ProMvvm.Sample.CommunityToolkit -c Release --no-build
+      - run: dotnet run --project samples/ProMvvm.Sample.ReactiveUI.Expression -c Release --no-build
+      - run: dotnet run --project samples/ProMvvm.Sample.CommunityToolkit.Expression -c Release --no-build
       - run: dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release --no-build -- --list flat
       - if: runner.os == 'Linux'
         run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages

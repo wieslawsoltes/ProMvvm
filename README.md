@@ -76,14 +76,20 @@ Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact 
 
 ## Compatibility samples
 
-- [ReactiveUI 24 sample](samples/ProMvvm.Sample.ReactiveUI) uses `ReactiveUI.Reactive` 24.0.0, `ReactiveUI.SourceGenerators` 3.2.0, and System.Reactive 7.
-- [CommunityToolkit.Mvvm sample](samples/ProMvvm.Sample.CommunityToolkit) uses generated `[ObservableProperty]` properties and System.Reactive 7.
+- [ReactiveUI 24 typed sample](samples/ProMvvm.Sample.ReactiveUI) uses generated ProMvvm descriptors with `ReactiveUI.Reactive` 24.0.0 and `ReactiveUI.SourceGenerators` 3.2.0.
+- [CommunityToolkit.Mvvm typed sample](samples/ProMvvm.Sample.CommunityToolkit) uses generated ProMvvm descriptors with `[ObservableProperty]` properties.
+- [ReactiveUI 24 expression sample](samples/ProMvvm.Sample.ReactiveUI.Expression) demonstrates direct, nested, selector, and tuple expression observations.
+- [CommunityToolkit.Mvvm expression sample](samples/ProMvvm.Sample.CommunityToolkit.Expression) demonstrates the same expression migration surface on Toolkit-generated properties.
+
+The typed samples are the trim-safe and NativeAOT-safe examples. The expression samples intentionally target ordinary JIT applications and keep the `RequiresUnreferencedCode` boundary visible at their call sites.
 
 Run them with:
 
 ```bash
 dotnet run --project samples/ProMvvm.Sample.ReactiveUI -c Release
 dotnet run --project samples/ProMvvm.Sample.CommunityToolkit -c Release
+dotnet run --project samples/ProMvvm.Sample.ReactiveUI.Expression -c Release
+dotnet run --project samples/ProMvvm.Sample.CommunityToolkit.Expression -c Release
 ```
 
 ## Verification
