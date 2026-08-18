@@ -65,6 +65,32 @@ public sealed class BenchmarkChild : INotifyPropertyChanged
     }
 }
 
+public sealed class BenchmarkIndexerModel : INotifyPropertyChanged
+{
+    private readonly int[] _values = [0];
+    private BenchmarkIndexerModel? _child;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public BenchmarkIndexerModel? Child
+    {
+        get => _child;
+        set
+        {
+            _child = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Child)));
+        }
+    }
+
+    public int this[int index] => _values[index];
+
+    public void SetIndex(int value)
+    {
+        _values[0] = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
+    }
+}
+
 internal sealed class BenchmarkObserver<T> : IObserver<T>
 {
     public T? LastValue { get; private set; }
@@ -104,4 +130,13 @@ internal static class BenchmarkPaths
                 nameof(BenchmarkModel.Child), static model => model.Child)
             .Then(nameof(BenchmarkChild.Child), static child => child!.Child)
             .Then(nameof(BenchmarkChild.Value), static child => child!.Value);
+
+    public static readonly PropertyPath<BenchmarkIndexerModel, int> Index =
+        PropertyPath.Create<BenchmarkIndexerModel, int>(
+            "Item[]", static model => model[0]);
+
+    public static readonly PropertyPath<BenchmarkIndexerModel, int> ChildIndex =
+        PropertyPath.Create<BenchmarkIndexerModel, BenchmarkIndexerModel?>(
+                nameof(BenchmarkIndexerModel.Child), static model => model.Child)
+            .Then("Item[]", static child => child![0]);
 }
