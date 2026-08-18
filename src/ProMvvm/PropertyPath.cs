@@ -17,17 +17,20 @@ public sealed class PropertyPath<TSource, TValue>
     private readonly string? _singlePropertyName;
     private readonly Func<TSource, TValue>? _singleGetter;
     private readonly IPropertyPathObservableFactory<TSource, TValue>? _specializedFactory;
+    private readonly IPropertyPathContinuationFactory<TSource, TValue>? _continuationFactory;
 
     private PropertyPath(
         ImmutableArray<IPropertyPathSegment> segments,
         string? singlePropertyName = null,
         Func<TSource, TValue>? singleGetter = null,
-        IPropertyPathObservableFactory<TSource, TValue>? specializedFactory = null)
+        IPropertyPathObservableFactory<TSource, TValue>? specializedFactory = null,
+        IPropertyPathContinuationFactory<TSource, TValue>? continuationFactory = null)
     {
         _segments = segments;
         _singlePropertyName = singlePropertyName;
         _singleGetter = singleGetter;
         _specializedFactory = specializedFactory;
+        _continuationFactory = continuationFactory;
     }
 
     internal ImmutableArray<IPropertyPathSegment> Segments => _segments;
@@ -46,16 +49,45 @@ public sealed class PropertyPath<TSource, TValue>
         string propertyName1,
         Func<TSource, TIntermediate> getter1,
         string propertyName2,
-        Func<TIntermediate, TValue> getter2) => new(
-        [
-            new PropertyPathSegment<TSource, TIntermediate>(propertyName1, getter1),
-            new PropertyPathSegment<TIntermediate, TValue>(propertyName2, getter2),
-        ],
-        specializedFactory: new TwoSegmentObservableFactory<TSource, TIntermediate, TValue>(
+        Func<TIntermediate, TValue> getter2)
+    {
+        var factory = new TwoSegmentObservableFactory<TSource, TIntermediate, TValue>(
             propertyName1,
             getter1,
             propertyName2,
-            getter2));
+            getter2);
+        return new PropertyPath<TSource, TValue>(
+            [
+                new PropertyPathSegment<TSource, TIntermediate>(propertyName1, getter1),
+                new PropertyPathSegment<TIntermediate, TValue>(propertyName2, getter2),
+            ],
+            specializedFactory: factory,
+            continuationFactory: factory);
+    }
+
+    internal static PropertyPath<TSource, TValue> FromThree<TIntermediate1, TIntermediate2>(
+        string propertyName1,
+        Func<TSource, TIntermediate1> getter1,
+        string propertyName2,
+        Func<TIntermediate1, TIntermediate2> getter2,
+        string propertyName3,
+        Func<TIntermediate2, TValue> getter3) => new(
+        [
+            new PropertyPathSegment<TSource, TIntermediate1>(propertyName1, getter1),
+            new PropertyPathSegment<TIntermediate1, TIntermediate2>(propertyName2, getter2),
+            new PropertyPathSegment<TIntermediate2, TValue>(propertyName3, getter3),
+        ],
+        specializedFactory: new ThreeSegmentObservableFactory<
+            TSource,
+            TIntermediate1,
+            TIntermediate2,
+            TValue>(
+                propertyName1,
+                getter1,
+                propertyName2,
+                getter2,
+                propertyName3,
+                getter3));
 
     internal bool TryGetSingle(
         [NotNullWhen(true)] out string? propertyName,
@@ -94,9 +126,22 @@ public sealed class PropertyPath<TSource, TValue>
                 getter);
         }
 
+        if (_continuationFactory is not null)
+        {
+            return _continuationFactory.Then(propertyName, getter);
+        }
+
         return new PropertyPath<TSource, TNext>(
             _segments.Add(new PropertyPathSegment<TValue, TNext>(propertyName, getter)));
     }
+}
+
+internal interface IPropertyPathContinuationFactory<TSource, TValue>
+    where TSource : class
+{
+    PropertyPath<TSource, TNext> Then<TNext>(
+        string propertyName,
+        Func<TValue, TNext> getter);
 }
 
 internal interface IPropertyPathObservableFactory<TSource, TValue>
@@ -112,7 +157,9 @@ internal sealed class TwoSegmentObservableFactory<TSource, TIntermediate, TValue
     string propertyName1,
     Func<TSource, TIntermediate> getter1,
     string propertyName2,
-    Func<TIntermediate, TValue> getter2) : IPropertyPathObservableFactory<TSource, TValue>
+    Func<TIntermediate, TValue> getter2) :
+    IPropertyPathObservableFactory<TSource, TValue>,
+    IPropertyPathContinuationFactory<TSource, TValue>
     where TSource : class
 {
     public IObservable<TValue> Create(
@@ -124,8 +171,50 @@ internal sealed class TwoSegmentObservableFactory<TSource, TIntermediate, TValue
         getter1,
         propertyName2,
         getter2,
-        isDistinct,
-        comparer);
+            isDistinct,
+            comparer);
+
+    public PropertyPath<TSource, TNext> Then<TNext>(
+        string propertyName,
+        Func<TValue, TNext> getter) => PropertyPath<TSource, TNext>.FromThree(
+            propertyName1,
+            getter1,
+            propertyName2,
+            getter2,
+            propertyName,
+            getter);
+}
+
+internal sealed class ThreeSegmentObservableFactory<
+    TSource,
+    TIntermediate1,
+    TIntermediate2,
+    TValue>(
+        string propertyName1,
+        Func<TSource, TIntermediate1> getter1,
+        string propertyName2,
+        Func<TIntermediate1, TIntermediate2> getter2,
+        string propertyName3,
+        Func<TIntermediate2, TValue> getter3) : IPropertyPathObservableFactory<TSource, TValue>
+    where TSource : class
+{
+    public IObservable<TValue> Create(
+        TSource source,
+        bool isDistinct,
+        IEqualityComparer<TValue> comparer) => new ThreeSegmentPropertyObservable<
+            TSource,
+            TIntermediate1,
+            TIntermediate2,
+            TValue>(
+                source,
+                propertyName1,
+                getter1,
+                propertyName2,
+                getter2,
+                propertyName3,
+                getter3,
+                isDistinct,
+                comparer);
 }
 
 internal interface IPropertyPathSegment

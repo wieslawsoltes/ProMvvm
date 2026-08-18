@@ -18,6 +18,23 @@ public sealed class ExpressionCompatibilityTests
     }
 
     [Fact]
+    public void OptimizesInheritedDirectAndNestedProperties()
+    {
+        var child = new ObservableModel { Name = "one" };
+        var model = new DerivedObservableModel { Count = 1, Child = child };
+        var counts = new List<int>();
+        var names = new List<string?>();
+
+        using var countSubscription = model.WhenAnyValue(value => value.Count).Subscribe(counts.Add);
+        using var nameSubscription = model.WhenAnyValue(value => value.Child!.Name).Subscribe(names.Add);
+        model.Count = 2;
+        child.Name = "two";
+
+        Assert.Equal([1, 2], counts);
+        Assert.Equal(["one", "two"], names);
+    }
+
+    [Fact]
     public void ReusesCachedPathsAcrossSameTypedProperties()
     {
         var model = new ObservableModel { Count = 3 };
@@ -81,6 +98,25 @@ public sealed class ExpressionCompatibilityTests
 
         Assert.Equal(4, model.SubscriberCount);
         Assert.Equal(4, model.Child!.SubscriberCount);
+    }
+
+    [Fact]
+    public void ReusesAndAlternatesCachedThreePropertyPaths()
+    {
+        var leaf = new ObservableModel { Count = 4 };
+        var middle = new ObservableModel { Child = leaf };
+        var model = new ObservableModel { Child = middle };
+
+        using var count = model.WhenAnyValue(value => value.Child!.Child!.Count).Subscribe(_ => { });
+        using var subscribers = model.WhenAnyValue(value => value.Child!.Child!.SubscriberCount)
+            .Subscribe(_ => { });
+        using var cachedSubscribers = model.WhenAnyValue(value => value.Child!.Child!.SubscriberCount)
+            .Subscribe(_ => { });
+        using var cachedCount = model.WhenAnyValue(value => value.Child!.Child!.Count).Subscribe(_ => { });
+
+        Assert.Equal(4, model.SubscriberCount);
+        Assert.Equal(4, middle.SubscriberCount);
+        Assert.Equal(4, leaf.SubscriberCount);
     }
 
     [Fact]

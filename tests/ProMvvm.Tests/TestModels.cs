@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace ProMvvm.Tests;
 
-internal sealed class ObservableModel : INotifyPropertyChanged
+internal class ObservableModel : INotifyPropertyChanged
 {
     private PropertyChangedEventHandler? _propertyChanged;
     private readonly object _eventGate = new();
@@ -77,6 +77,8 @@ internal sealed class ObservableModel : INotifyPropertyChanged
     }
 }
 
+internal sealed class DerivedObservableModel : ObservableModel;
+
 internal sealed class FieldModel : INotifyPropertyChanged
 {
     public int Value;
@@ -93,6 +95,16 @@ internal sealed class FieldModel : INotifyPropertyChanged
 internal sealed class PlainModel
 {
     public int Value { get; set; }
+}
+
+internal sealed class PlainThreeSegmentRoot
+{
+    public PlainThreeSegmentMiddle Middle { get; } = new();
+}
+
+internal sealed class PlainThreeSegmentMiddle
+{
+    public PlainModel Leaf { get; } = new() { Value = 11 };
 }
 
 internal sealed class ThrowingObserver<T> : IObserver<T>

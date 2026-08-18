@@ -54,6 +54,27 @@ if (!nestedValues.SequenceEqual([4, 6, 5]))
     throw new InvalidOperationException("AOT specialized nested observation failed.");
 }
 
+var deepPath = PropertyPath
+    .Create<AotModel, AotChild?>(nameof(AotModel.Child), static value => value.Child)
+    .Then(nameof(AotChild.Child), static value => value!.Child)
+    .Then(nameof(AotChild.Value), static value => value!.Value);
+var oldLeaf = new AotChild { Value = 10 };
+var newLeaf = new AotChild { Value = 11 };
+newChild.Child = oldLeaf;
+model.Child = newChild;
+var deepValues = new List<int>();
+using (model.WhenAnyValue(deepPath).Subscribe(new ListObserver<int>(deepValues)))
+{
+    oldLeaf.Value = 12;
+    newChild.Child = newLeaf;
+    oldLeaf.Value = 13;
+}
+
+if (!deepValues.SequenceEqual([10, 12, 11]))
+{
+    throw new InvalidOperationException("AOT specialized three-segment observation failed.");
+}
+
 var adapterModel = new AdapterModel { Value = 8 };
 var adapter = PropertyNotificationAdapters.Create<AdapterModel>(
     static (source, callback) => source.Subscribe(callback));
@@ -104,6 +125,7 @@ internal sealed class AotModel : INotifyPropertyChanged
 internal sealed class AotChild : INotifyPropertyChanged
 {
     private int _value;
+    private AotChild? _child;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -114,6 +136,16 @@ internal sealed class AotChild : INotifyPropertyChanged
         {
             _value = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public AotChild? Child
+    {
+        get => _child;
+        set
+        {
+            _child = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Child)));
         }
     }
 }

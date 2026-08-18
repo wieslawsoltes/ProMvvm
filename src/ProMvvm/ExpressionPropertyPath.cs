@@ -22,9 +22,8 @@ internal static class ExpressionPropertyPath
                 Expression: { } target,
             } &&
             StripConvert(target) == expression.Parameters[0] &&
-            memberProperty.DeclaringType == typeof(TSource) &&
             memberProperty.PropertyType == typeof(TValue) &&
-            memberProperty.GetMethod is { IsStatic: false })
+            CanReadInstancePropertyFrom(memberProperty, typeof(TSource)))
         {
             return SinglePropertyCache<TSource, TValue>.GetOrAdd(memberProperty);
         }
@@ -39,13 +38,36 @@ internal static class ExpressionPropertyPath
                 },
             } &&
             StripConvert(rootTarget) == expression.Parameters[0] &&
-            rootProperty.DeclaringType == typeof(TSource) &&
-            rootProperty.GetMethod is { IsStatic: false } &&
-            leafProperty.DeclaringType == rootProperty.PropertyType &&
-            leafProperty.PropertyType == typeof(TValue) &&
-            leafProperty.GetMethod is { IsStatic: false })
+            CanReadInstancePropertyFrom(rootProperty, typeof(TSource)) &&
+            CanReadInstancePropertyFrom(leafProperty, rootProperty.PropertyType) &&
+            leafProperty.PropertyType == typeof(TValue))
         {
             return TwoPropertyCache<TSource, TValue>.GetOrAdd(rootProperty, leafProperty);
+        }
+
+        if (body is MemberExpression
+            {
+                Member: PropertyInfo leafProperty3,
+                Expression: MemberExpression
+                {
+                    Member: PropertyInfo middleProperty3,
+                    Expression: MemberExpression
+                    {
+                        Member: PropertyInfo rootProperty3,
+                        Expression: { } rootTarget3,
+                    },
+                },
+            } &&
+            StripConvert(rootTarget3) == expression.Parameters[0] &&
+            CanReadInstancePropertyFrom(rootProperty3, typeof(TSource)) &&
+            CanReadInstancePropertyFrom(middleProperty3, rootProperty3.PropertyType) &&
+            CanReadInstancePropertyFrom(leafProperty3, middleProperty3.PropertyType) &&
+            leafProperty3.PropertyType == typeof(TValue))
+        {
+            return ThreePropertyCache<TSource, TValue>.GetOrAdd(
+                rootProperty3,
+                middleProperty3,
+                leafProperty3);
         }
 
         var members = new Stack<MemberInfo>();
@@ -86,6 +108,10 @@ internal static class ExpressionPropertyPath
 
         return expression;
     }
+
+    private static bool CanReadInstancePropertyFrom(PropertyInfo property, Type instanceType) =>
+        property.GetMethod is { IsStatic: false } &&
+        property.DeclaringType?.IsAssignableFrom(instanceType) == true;
 
     private sealed class ReflectedPropertyPathSegment(PropertyInfo property) : IPropertyPathSegment
     {
@@ -180,6 +206,68 @@ internal static class ExpressionPropertyPath
             PropertyPath<TSource, TValue> path)
         {
             public PropertyInfo RootProperty { get; } = rootProperty;
+
+            public PropertyInfo LeafProperty { get; } = leafProperty;
+
+            public PropertyPath<TSource, TValue> Path { get; } = path;
+        }
+    }
+
+    private static class ThreePropertyCache<TSource, TValue>
+        where TSource : class
+    {
+        private static readonly ConcurrentDictionary<
+            (PropertyInfo Root, PropertyInfo Middle, PropertyInfo Leaf),
+            CacheEntry> Paths = new();
+        private static CacheEntry? _lastEntry;
+
+        public static PropertyPath<TSource, TValue> GetOrAdd(
+            PropertyInfo rootProperty,
+            PropertyInfo middleProperty,
+            PropertyInfo leafProperty)
+        {
+            var lastEntry = Volatile.Read(ref _lastEntry);
+            if (lastEntry is not null &&
+                ReferenceEquals(lastEntry.RootProperty, rootProperty) &&
+                ReferenceEquals(lastEntry.MiddleProperty, middleProperty) &&
+                ReferenceEquals(lastEntry.LeafProperty, leafProperty))
+            {
+                return lastEntry.Path;
+            }
+
+            var entry = Paths.GetOrAdd(
+                (rootProperty, middleProperty, leafProperty),
+                static properties => new CacheEntry(
+                    properties.Root,
+                    properties.Middle,
+                    properties.Leaf,
+                    CreatePath(properties.Root, properties.Middle, properties.Leaf)));
+
+            Volatile.Write(ref _lastEntry, entry);
+            return entry.Path;
+        }
+
+        private static PropertyPath<TSource, TValue> CreatePath(
+            PropertyInfo rootProperty,
+            PropertyInfo middleProperty,
+            PropertyInfo leafProperty) =>
+            PropertyPath<TSource, TValue>.FromThree<object?, object?>(
+                rootProperty.Name,
+                source => rootProperty.GetValue(source),
+                middleProperty.Name,
+                intermediate => middleProperty.GetValue(intermediate!),
+                leafProperty.Name,
+                intermediate => (TValue)leafProperty.GetValue(intermediate!)!);
+
+        private sealed class CacheEntry(
+            PropertyInfo rootProperty,
+            PropertyInfo middleProperty,
+            PropertyInfo leafProperty,
+            PropertyPath<TSource, TValue> path)
+        {
+            public PropertyInfo RootProperty { get; } = rootProperty;
+
+            public PropertyInfo MiddleProperty { get; } = middleProperty;
 
             public PropertyInfo LeafProperty { get; } = leafProperty;
 
