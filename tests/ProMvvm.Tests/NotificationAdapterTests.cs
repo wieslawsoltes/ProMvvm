@@ -101,6 +101,26 @@ public sealed class NotificationAdapterTests
     }
 
     [Fact]
+    public void InpcAdapterSubscriptionDisposesIdempotently()
+    {
+        var model = new ObservableModel();
+        var notifications = 0;
+        var subscription = PropertyNotificationAdapters.Inpc.Subscribe(
+            model,
+            _ => notifications++);
+
+        Assert.NotNull(subscription);
+        Assert.Equal(1, model.SubscriberCount);
+
+        subscription.Dispose();
+        subscription.Dispose();
+        model.Count = 1;
+
+        Assert.Equal(0, model.SubscriberCount);
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
     public void GeneralAdapterPathIgnoresCallbacksRetainedAfterDisposal()
     {
         var model = new CustomRoot { Child = new CustomChild { Name = "initial" } };
