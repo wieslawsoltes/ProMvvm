@@ -31,7 +31,24 @@ using var subscription = viewModel.WhenAnyValue(city).Subscribe(Console.WriteLin
 ```
 
 These overloads use only normal delegates and property-change events. They do not reflect, compile expressions, or require dynamic code.
-Single-property typed paths use a specialized generic sink that avoids value boxing on the steady-state notification path.
+Single-property and two-segment typed paths use specialized generic sinks that avoid value boxing and the general watcher graph on their steady-state notification paths.
+
+Annotate a model to generate reusable descriptors for every accessible property:
+
+```csharp
+[GeneratePropertyPaths]
+public partial class SearchViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+}
+
+using var subscription = viewModel
+    .WhenAnyValue(SearchViewModelPropertyPaths.SearchText)
+    .Subscribe(Console.WriteLine);
+```
+
+The generator recognizes ordinary properties, CommunityToolkit.Mvvm `[ObservableProperty]` fields, and ReactiveUI.SourceGenerators `[Reactive]` fields. The generated call site is terse, reusable, reflection-free, trim-safe, and NativeAOT-safe.
 
 For gradual migration, expression syntax is also available:
 
@@ -52,7 +69,8 @@ Expression overloads are intentionally marked `RequiresUnreferencedCode`. Exact 
 - Suppresses output while an intermediate object is `null`; a `null` final value remains valid.
 - Applies final-value distinctness by default, including across temporarily invalid nested chains.
 - Supports custom equality comparers and disabling distinctness.
-- Supports two-property selector and tuple overloads, including expression migration overloads.
+- Supports typed and expression selector and tuple overloads from arity 2 through arity 12.
+- Accepts explicit notification adapters for custom events or `IObservable<string?>` change streams, including mixed object chains, without global registration.
 - Serializes model event handling and observer notification per subscription.
 - Detaches all handlers on disposal or terminal getter/selector error.
 
@@ -73,14 +91,15 @@ dotnet run --project samples/ProMvvm.Sample.CommunityToolkit -c Release
 ```bash
 dotnet build ProMvvm.slnx -c Release
 dotnet test tests/ProMvvm.Tests -c Release
+dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release
 dotnet test tests/ProMvvm.IntegrationTests -c Release
 
 dotnet publish tests/ProMvvm.AotSmoke -c Release -r osx-arm64 --self-contained
 ./tests/ProMvvm.AotSmoke/bin/Release/net10.0/osx-arm64/publish/ProMvvm.AotSmoke
 ```
 
-Release unit tests enforce 100% line coverage, at least 98% branch coverage, and 100% method coverage. The integration suite separately compiles and executes both source-generator ecosystems.
-The minimal smoke app and both framework samples are also NativeAOT-published and executed in CI.
+Release unit tests enforce 100% line coverage, at least 98% branch coverage, and 100% method coverage. Dedicated generator tests validate emitted descriptors and overloads; integration tests compile and execute both source-generator ecosystems.
+CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed.
 
 ## Benchmarks
 
@@ -91,7 +110,7 @@ The BenchmarkDotNet suite compares four paths under the same notification models
 3. ReactiveUI 24 core expression paths.
 4. ReactiveUI.Reactive 24 expression paths.
 
-It covers cold construction, warmed end-to-end hot start, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), nested leaf emission, nested-chain rewiring, multi-property projection, and allocation for every case.
+It covers cold construction, warmed end-to-end hot start, generated-descriptor hot start, subscribe + initial emission + disposal, leaf emission, burst throughput (1, 100, and 10,000 changes), nested leaf emission, nested-chain rewiring, arity-2 and arity-12 projection, explicit-adapter overhead, and allocation for every case.
 
 ```bash
 dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release -- --filter '*'
@@ -101,12 +120,6 @@ See [benchmarks/README.md](benchmarks/README.md) for focused commands and measur
 
 ## Status and next parity work
 
-This is a working foundation, not yet a complete ReactiveUI `WhenAnyValue` replacement. The next compatibility milestones are:
-
-- typed and expression overload generation through arity 12;
-- source-generated property descriptors for terse, zero-reflection call sites;
-- notification adapters beyond `INotifyPropertyChanged` without introducing a service locator;
-- wider concurrency, platform, trimming, and NativeAOT test matrices;
-- performance-driven specialization of nested paths and multi-source sinks.
+The current compatibility milestone includes generated arity-2-through-12 APIs and specialized sinks, generated property descriptors, explicit notification adapters, two-segment specialization, concurrent stress coverage, and cross-platform trim/NativeAOT matrices. It remains a focused `WhenAnyValue` implementation rather than a complete ReactiveUI replacement; binding, commands, activation, routing, before-change observation, and string/dynamic paths remain outside the current slice.
 
 The compatibility namespace is `ProMvvm`, so both libraries may be referenced during gradual migration. The explicit getter + property-name overload also avoids extension ambiguity when `ReactiveUI.Reactive` is imported.

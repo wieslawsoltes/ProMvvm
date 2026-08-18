@@ -7,13 +7,16 @@ All benchmarks use BenchmarkDotNet, .NET 10, the same hand-written `INotifyPrope
 | Area | Work measured | Compared implementations |
 |---|---|---|
 | Construction | Create a cold observable without subscribing | typed path, typed getter, expression, ReactiveUI core, ReactiveUI.Reactive |
-| Hot start | Create a warmed observable, subscribe, receive its initial value, and dispose | typed path, typed getter, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Hot start | Create a warmed observable, subscribe, receive its initial value, and dispose | typed path, typed getter, generated descriptor, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Subscription | Subscribe, receive initial value, dispose | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Leaf emission | One already-subscribed property change | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Burst | 1, 100, or 10,000 property changes | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Nested leaf | Change a leaf on an established two-level chain | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
 | Nested rewire | Replace the intermediate object and rewire handlers | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
-| Multi-property | Change one input of a two-property selector | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Multi-property | Change one input of an arity-2 selector | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Arity-12 emission | Notify twelve subscribed inputs and project each latest set | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Arity-12 hot start | Create, subscribe, synchronously initialize twelve inputs, and dispose | typed, expression, ReactiveUI core, ReactiveUI.Reactive |
+| Notification adapter | Change one property through direct INPC or the explicit INPC adapter | direct INPC, explicit adapter |
 
 `MemoryDiagnoser` is enabled for every benchmark. ProMvvm typed methods are the baseline within each group.
 
@@ -24,15 +27,19 @@ Measured on 2026-08-18 with BenchmarkDotNet 0.15.8, .NET 10.0.5, macOS 26.6, and
 | Scenario | ProMvvm typed | ProMvvm expression | ReactiveUI core | ReactiveUI.Reactive |
 |---|---:|---:|---:|---:|
 | Cold construction | 7.580 ns / 56 B (path); 6.596 ns / 56 B (getter) | 191.180 ns / 616 B | 214.658 ns / 712 B | 214.934 ns / 712 B |
-| Hot start | 46.47 ns / 232 B (path); 38.44 ns / 176 B (getter) | 242.35 ns / 792 B | 367.17 ns / 1,440 B | 386.74 ns / 1,440 B |
+| Hot start | 41.51 ns / 232 B (path); 33.15 ns / 176 B (getter); 41.45 ns / 232 B (generated) | 218.75 ns / 792 B | 325.76 ns / 1,440 B | 327.12 ns / 1,440 B |
 | Subscribe + initial value + dispose | 35.37 ns / 176 B | 38.31 ns / 176 B | 126.97 ns / 728 B | 132.56 ns / 728 B |
 | Single emission | 8.783 ns / 24 B | 11.264 ns / 24 B | 29.214 ns / 88 B | 29.234 ns / 88 B |
 | Burst: 1 change | 9.565 ns / 24 B | 11.200 ns / 24 B | 24.933 ns / 48 B | 25.083 ns / 48 B |
 | Burst: 100 changes | 0.974 us / 2,400 B | 1.173 us / 2,400 B | 3.035 us / 8,800 B | 2.929 us / 8,800 B |
 | Burst: 10,000 changes | 99.014 us / 240,000 B | 117.010 us / 240,000 B | 293.277 us / 880,000 B | 292.396 us / 880,000 B |
-| Two-property selector | 25.01 ns / 24 B | 26.74 ns / 24 B | 50.55 ns / 88 B | 51.00 ns / 88 B |
-| Nested leaf change | 16.69 ns / 48 B | 21.83 ns / 48 B | 28.81 ns / 88 B | 28.90 ns / 88 B |
-| Nested rewire | 28.98 ns / 48 B | 39.40 ns / 48 B | 106.69 ns / 376 B | 107.70 ns / 376 B |
+| Two-property selector | 23.75 ns / 24 B | 25.35 ns / 24 B | 47.71 ns / 88 B | 47.53 ns / 88 B |
+| Twelve-property selector | 206.7 ns / 24 B | 226.9 ns / 24 B | 552.3 ns / 792 B | 553.8 ns / 792 B |
+| Twelve-property hot start | 1.220 us / 5.95 KB | 3.457 us / 12.51 KB | 4.773 us / 21.95 KB | 4.859 us / 21.95 KB |
+| Nested leaf change | 9.940 ns / 24 B | 19.166 ns / 48 B | 31.295 ns / 88 B | 31.174 ns / 88 B |
+| Nested rewire | 17.67 ns / 24 B | 29.50 ns / 48 B | 102.61 ns / 376 B | 106.67 ns / 376 B |
+
+The explicit-adapter emission result is 8.330 ns / 24 B versus 8.344 ns / 24 B for direct INPC, which is indistinguishable at this measurement resolution.
 
 Hot start means a warmed process and expression-path cache, while still including each operation's observable construction, runtime expression-tree construction where applicable, subscription, synchronous initial value, and disposal. It does not mean a shared hot observable.
 
