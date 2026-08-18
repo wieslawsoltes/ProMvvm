@@ -286,10 +286,12 @@ internal static class MultiArityEmitter
             EmitTypedSelector(builder, arity, withAdapter: true);
             EmitExpressionSelector(builder, arity, withAdapter: false);
             EmitExpressionSelector(builder, arity, withAdapter: true);
+            EmitStringSelector(builder, arity);
             EmitTypedTuple(builder, arity, withAdapter: false);
             EmitTypedTuple(builder, arity, withAdapter: true);
             EmitExpressionTuple(builder, arity, withAdapter: false);
             EmitExpressionTuple(builder, arity, withAdapter: true);
+            EmitStringTuple(builder, arity);
         }
 
         builder.AppendLine("}");
@@ -368,9 +370,9 @@ internal static class MultiArityEmitter
             .Append(arity)
             .AppendLine(" expression paths and projects their latest values.</summary>")
             .AppendLine("    [RequiresUnreferencedCode(\"Expression compatibility uses reflected metadata. Use typed PropertyPath arguments for trimming and NativeAOT.\")]")
-            .Append("    public static IObservable<TResult> WhenAnyValue<TSource, ")
+            .Append("    public static IObservable<TResult> WhenAnyValue<TSource, TResult, ")
             .Append(TypeParameters(arity))
-            .AppendLine(", TResult>(")
+            .AppendLine(">(")
             .AppendLine("        this TSource source,");
         EmitParameters(builder, arity, "Expression<Func<TSource, T{0}>> property{0}");
         builder.Append("        Func<")
@@ -400,6 +402,33 @@ internal static class MultiArityEmitter
 
         builder.AppendLine("            isDistinct,")
             .AppendLine("            comparer);")
+            .AppendLine();
+    }
+
+    private static void EmitStringSelector(StringBuilder builder, int arity)
+    {
+        builder.Append("    /// <summary>ReactiveUI-compatible projection of ")
+            .Append(arity)
+            .AppendLine(" public properties observed by name.</summary>")
+            .AppendLine("    [RequiresUnreferencedCode(\"String property compatibility resolves public property metadata by name. Use generated or typed PropertyPath arguments for trimming and NativeAOT.\")]")
+            .Append("    public static IObservable<TResult> WhenAnyValue<TSource, TResult, ")
+            .Append(TypeParameters(arity))
+            .AppendLine(">(")
+            .AppendLine("        this TSource source,");
+        EmitParameters(builder, arity, "string property{0}Name");
+        builder.Append("        Func<")
+            .Append(TypeParameters(arity))
+            .AppendLine(", TResult> selector,")
+            .AppendLine("        bool isDistinct = true)")
+            .AppendLine("        where TSource : class")
+            .AppendLine("    {")
+            .AppendLine("        ArgumentNullException.ThrowIfNull(source);")
+            .AppendLine("        ArgumentNullException.ThrowIfNull(selector);")
+            .AppendLine("        return source.WhenAnyValue(");
+        EmitArguments(builder, arity, "StringPropertyPath.Create<TSource, T{0}>(source, property{0}Name)");
+        builder.AppendLine("            selector,")
+            .AppendLine("            isDistinct);")
+            .AppendLine("    }")
             .AppendLine();
     }
 
@@ -469,6 +498,31 @@ internal static class MultiArityEmitter
         }
 
         builder.AppendLine("            isDistinct);")
+            .AppendLine();
+    }
+
+    private static void EmitStringTuple(StringBuilder builder, int arity)
+    {
+        builder.Append("    /// <summary>ReactiveUI-compatible observation of ")
+            .Append(arity)
+            .AppendLine(" public properties by name as a value tuple.</summary>")
+            .AppendLine("    [RequiresUnreferencedCode(\"String property compatibility resolves public property metadata by name. Use generated or typed PropertyPath arguments for trimming and NativeAOT.\")]")
+            .Append("    public static IObservable<")
+            .Append(TupleType(arity))
+            .Append("> WhenAnyValue<TSource, ")
+            .Append(TypeParameters(arity))
+            .AppendLine(">(")
+            .AppendLine("        this TSource source,");
+        EmitParameters(builder, arity, "string property{0}Name");
+        builder.AppendLine("        bool isDistinct = true) where TSource : class =>")
+            .AppendLine("        source.WhenAnyValue(");
+        EmitArguments(builder, arity, "StringPropertyPath.Create<TSource, T{0}>(source, property{0}Name)");
+        builder.Append("            static (")
+            .Append(ValueParameters(arity))
+            .Append(") => (")
+            .Append(ValueArguments(arity))
+            .AppendLine("),")
+            .AppendLine("            isDistinct);")
             .AppendLine();
     }
 

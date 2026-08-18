@@ -143,6 +143,56 @@ public static class WhenAnyValueExtensions
             comparer);
     }
 
+    /// <summary>ReactiveUI-compatible observation of one public property by name.</summary>
+    [RequiresUnreferencedCode("String property compatibility resolves public property metadata by name. Use a generated or typed PropertyPath for trim-safe and NativeAOT-safe observation.")]
+    public static IObservable<TValue> WhenAnyValue<TSource, TValue>(
+        this TSource source,
+        string propertyName,
+        bool isDistinct = true)
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return source.WhenAnyValue(
+            StringPropertyPath.Create<TSource, TValue>(source, propertyName),
+            isDistinct);
+    }
+
+    /// <summary>ReactiveUI-compatible single-property expression projection.</summary>
+    [RequiresUnreferencedCode("Expression compatibility uses reflected property or field metadata. Use the PropertyPath or getter overload for trim-safe and NativeAOT-safe observation.")]
+    public static IObservable<TResult> WhenAnyValue<TSource, TResult, TValue>(
+        this TSource source,
+        Expression<Func<TSource, TValue>> property,
+        Func<TValue, TResult> selector,
+        bool isDistinct = true)
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(selector);
+        return CreateProjection(
+            source,
+            ExpressionPropertyPath.Create(property),
+            selector,
+            isDistinct);
+    }
+
+    /// <summary>ReactiveUI-compatible projection of one public property observed by name.</summary>
+    [RequiresUnreferencedCode("String property compatibility resolves public property metadata by name. Use a generated or typed PropertyPath for trim-safe and NativeAOT-safe observation.")]
+    public static IObservable<TResult> WhenAnyValue<TSource, TResult, TValue>(
+        this TSource source,
+        string propertyName,
+        Func<TValue, TResult> selector,
+        bool isDistinct = true)
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(selector);
+        return CreateProjection(
+            source,
+            StringPropertyPath.Create<TSource, TValue>(source, propertyName),
+            selector,
+            isDistinct);
+    }
+
     /// <summary>Observes an expression path through an explicitly supplied notification adapter.</summary>
     [RequiresUnreferencedCode("Expression compatibility uses reflected property or field metadata. Use the PropertyPath or getter overload for trim-safe and NativeAOT-safe observation.")]
     public static IObservable<TValue> WhenAnyValue<TSource, TValue>(
@@ -160,5 +210,28 @@ public static class WhenAnyValueExtensions
             notificationAdapter,
             isDistinct,
             comparer);
+    }
+
+    private static IObservable<TResult> CreateProjection<TSource, TValue, TResult>(
+        TSource source,
+        PropertyPath<TSource, TValue> path,
+        Func<TValue, TResult> selector,
+        bool isDistinct)
+        where TSource : class
+    {
+        if (path.TryGetSingle(out var propertyName, out var getter))
+        {
+            return new SinglePropertyProjectionObservable<TSource, TValue, TResult>(
+                source,
+                propertyName,
+                getter,
+                selector,
+                isDistinct,
+                EqualityComparer<TValue>.Default);
+        }
+
+        return new SelectObservable<TValue, TResult>(
+            source.WhenAnyValue(path, isDistinct),
+            selector);
     }
 }

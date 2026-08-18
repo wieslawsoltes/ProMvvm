@@ -79,6 +79,11 @@ internal class ObservableModel : INotifyPropertyChanged
 
 internal sealed class DerivedObservableModel : ObservableModel;
 
+internal sealed class RuntimePropertyObservableModel : ObservableModel
+{
+    public string? RuntimeOnly { get; set; }
+}
+
 internal sealed class FieldModel : INotifyPropertyChanged
 {
     public int Value;

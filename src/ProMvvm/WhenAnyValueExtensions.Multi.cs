@@ -56,7 +56,7 @@ public static partial class WhenAnyValueMultiExtensions
 
     /// <summary>ReactiveUI-compatible two-property expression overload.</summary>
     [RequiresUnreferencedCode("Expression compatibility uses reflected metadata. Use typed PropertyPath arguments for trimming and NativeAOT.")]
-    public static IObservable<TResult> WhenAnyValue<TSource, T1, T2, TResult>(
+    public static IObservable<TResult> WhenAnyValue<TSource, TResult, T1, T2>(
         this TSource source,
         Expression<Func<TSource, T1>> property1,
         Expression<Func<TSource, T2>> property2,
@@ -71,9 +71,28 @@ public static partial class WhenAnyValueMultiExtensions
             isDistinct,
             comparer);
 
+    /// <summary>ReactiveUI-compatible two-property string-name projection overload.</summary>
+    [RequiresUnreferencedCode("String property compatibility resolves public property metadata by name. Use typed PropertyPath arguments for trimming and NativeAOT.")]
+    public static IObservable<TResult> WhenAnyValue<TSource, TResult, T1, T2>(
+        this TSource source,
+        string property1Name,
+        string property2Name,
+        Func<T1, T2, TResult> selector,
+        bool isDistinct = true)
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(selector);
+        return source.WhenAnyValue(
+            StringPropertyPath.Create<TSource, T1>(source, property1Name),
+            StringPropertyPath.Create<TSource, T2>(source, property2Name),
+            selector,
+            isDistinct);
+    }
+
     /// <summary>Observes two expression paths through an explicit adapter.</summary>
     [RequiresUnreferencedCode("Expression compatibility uses reflected metadata. Use typed PropertyPath arguments for trimming and NativeAOT.")]
-    public static IObservable<TResult> WhenAnyValue<TSource, T1, T2, TResult>(
+    public static IObservable<TResult> WhenAnyValue<TSource, TResult, T1, T2>(
         this TSource source,
         Expression<Func<TSource, T1>> property1,
         Expression<Func<TSource, T2>> property2,
@@ -99,6 +118,20 @@ public static partial class WhenAnyValueMultiExtensions
         source.WhenAnyValue(
             property1,
             property2,
+            static (value1, value2) => (value1, value2),
+            isDistinct);
+
+    /// <summary>ReactiveUI-compatible two-property string-name tuple overload.</summary>
+    [RequiresUnreferencedCode("String property compatibility resolves public property metadata by name. Use typed PropertyPath arguments for trimming and NativeAOT.")]
+    public static IObservable<(T1 Value1, T2 Value2)> WhenAnyValue<TSource, T1, T2>(
+        this TSource source,
+        string property1Name,
+        string property2Name,
+        bool isDistinct = true)
+        where TSource : class =>
+        source.WhenAnyValue(
+            StringPropertyPath.Create<TSource, T1>(source, property1Name),
+            StringPropertyPath.Create<TSource, T2>(source, property2Name),
             static (value1, value2) => (value1, value2),
             isDistinct);
 

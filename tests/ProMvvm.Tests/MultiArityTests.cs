@@ -70,6 +70,72 @@ public sealed class MultiArityTests
         Assert.Equal(12, tuple12.Value12);
     }
 
+    [Fact]
+    public void StringSelectorOverloadsCoverTwoAndTwelveValues()
+    {
+        var model = new ArityModel();
+        var pair = new List<string>();
+        var twelve = new List<int>();
+
+        using var pairSubscription = model.WhenAnyValue<ArityModel, string, int, int>(
+                nameof(ArityModel.P1),
+                nameof(ArityModel.P2),
+                static (left, right) => $"{left}:{right}")
+            .Subscribe(pair.Add);
+        using var twelveSubscription = model.WhenAnyValue(
+                nameof(ArityModel.P1), nameof(ArityModel.P2), nameof(ArityModel.P3),
+                nameof(ArityModel.P4), nameof(ArityModel.P5), nameof(ArityModel.P6),
+                nameof(ArityModel.P7), nameof(ArityModel.P8), nameof(ArityModel.P9),
+                nameof(ArityModel.P10), nameof(ArityModel.P11), nameof(ArityModel.P12),
+                static (int a, int b, int c, int d, int e, int f, int g, int h, int i, int j, int k, int l) =>
+                    a + b + c + d + e + f + g + h + i + j + k + l)
+            .Subscribe(twelve.Add);
+
+        model.P12 = 20;
+
+        Assert.Equal(["1:2"], pair);
+        Assert.Equal([78, 86], twelve);
+    }
+
+    [Fact]
+    public void StringTupleOverloadsCoverTwoAndTwelveValues()
+    {
+        var model = new ArityModel();
+        (int Value1, int Value2) pair = default;
+        (int Value1, int Value2, int Value3, int Value4, int Value5, int Value6,
+            int Value7, int Value8, int Value9, int Value10, int Value11, int Value12) twelve = default;
+
+        using var pairSubscription = model.WhenAnyValue<ArityModel, int, int>(
+                nameof(ArityModel.P1), nameof(ArityModel.P2))
+            .Subscribe(value => pair = value);
+        using var twelveSubscription = model.WhenAnyValue<ArityModel,
+                int, int, int, int, int, int, int, int, int, int, int, int>(
+                nameof(ArityModel.P1), nameof(ArityModel.P2), nameof(ArityModel.P3),
+                nameof(ArityModel.P4), nameof(ArityModel.P5), nameof(ArityModel.P6),
+                nameof(ArityModel.P7), nameof(ArityModel.P8), nameof(ArityModel.P9),
+                nameof(ArityModel.P10), nameof(ArityModel.P11), nameof(ArityModel.P12))
+            .Subscribe(value => twelve = value);
+
+        Assert.Equal((1, 2), pair);
+        Assert.Equal(12, twelve.Value12);
+    }
+
+    [Fact]
+    public void ExpressionSelectorUsesReactiveUiGenericOrdering()
+    {
+        var model = new ArityModel();
+        var values = new List<string>();
+
+        using var subscription = model.WhenAnyValue<ArityModel, string, int, int>(
+                value => value.P1,
+                value => value.P2,
+                static (left, right) => $"{left}:{right}")
+            .Subscribe(values.Add);
+        model.P2 = 7;
+
+        Assert.Equal(["1:2", "1:7"], values);
+    }
+
     private static void AssertInitial(IObservable<int> observable, int expected)
     {
         var actual = 0;
