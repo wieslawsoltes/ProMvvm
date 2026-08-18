@@ -40,6 +40,7 @@ public sealed class BenchmarkModel : INotifyPropertyChanged
 public sealed class BenchmarkChild : INotifyPropertyChanged
 {
     private int _value;
+    private BenchmarkChild? _child;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -50,6 +51,16 @@ public sealed class BenchmarkChild : INotifyPropertyChanged
         {
             _value = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+        }
+    }
+
+    public BenchmarkChild? Child
+    {
+        get => _child;
+        set
+        {
+            _child = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Child)));
         }
     }
 }
@@ -86,5 +97,11 @@ internal static class BenchmarkPaths
     public static readonly PropertyPath<BenchmarkModel, int> ChildValue =
         PropertyPath.Create<BenchmarkModel, BenchmarkChild?>(
                 nameof(BenchmarkModel.Child), static model => model.Child)
+            .Then(nameof(BenchmarkChild.Value), static child => child!.Value);
+
+    public static readonly PropertyPath<BenchmarkModel, int> DeepChildValue =
+        PropertyPath.Create<BenchmarkModel, BenchmarkChild?>(
+                nameof(BenchmarkModel.Child), static model => model.Child)
+            .Then(nameof(BenchmarkChild.Child), static child => child!.Child)
             .Then(nameof(BenchmarkChild.Value), static child => child!.Value);
 }

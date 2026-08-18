@@ -15,6 +15,9 @@ internal static class ReactiveUiReactiveBenchmarkAdapter
     public static IObservable<int> ChildValue(BenchmarkModel model) =>
         ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue(model, value => value.Child!.Value);
 
+    public static IObservable<int> DeepChildValue(BenchmarkModel model) =>
+        ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue(model, value => value.Child!.Child!.Value);
+
     public static IObservable<int> Sum(BenchmarkModel model) =>
         ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue(
             model,
