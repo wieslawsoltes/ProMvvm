@@ -76,7 +76,10 @@ public sealed class ProMvvmGeneratorTests
         Assert.Empty(consumerResult.Results[0].GeneratedSources);
 
         var runtimeResult = Run(string.Empty, "ProMvvm");
-        var generated = Assert.Single(runtimeResult.Results[0].GeneratedSources).SourceText.ToString();
+        var generated = Assert.Single(runtimeResult.Results[0].GeneratedSources)
+            .SourceText
+            .ToString()
+            .ReplaceLineEndings("\n");
         Assert.Contains("T12", generated, StringComparison.Ordinal);
         Assert.Contains("IPropertyNotificationAdapter notificationAdapter", generated, StringComparison.Ordinal);
         Assert.Contains("CombineLatestObservable<T1, T2, T3, TResult>", generated, StringComparison.Ordinal);
