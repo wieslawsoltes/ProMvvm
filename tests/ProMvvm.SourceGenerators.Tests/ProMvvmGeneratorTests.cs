@@ -83,6 +83,9 @@ public sealed class ProMvvmGeneratorTests
         Assert.Contains("WhenAnyValue<TSource, TResult, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>", generated, StringComparison.Ordinal);
         Assert.Contains("StringPropertyPath.Create<TSource, T12>(source, property12Name)", generated, StringComparison.Ordinal);
         Assert.Contains("string property12Name", generated, StringComparison.Ordinal);
+        Assert.Contains("isDistinct && comparer is not null", generated, StringComparison.Ordinal);
+        Assert.Contains("selector,\n            false,\n            EqualityComparer<TResult>.Default", generated, StringComparison.Ordinal);
+        Assert.Contains("if (isDistinct)\n            {\n                if (_hasLastResult", generated, StringComparison.Ordinal);
     }
 
     private static GeneratorDriverRunResult Run(string source, string assemblyName)

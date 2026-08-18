@@ -136,6 +136,55 @@ public sealed class MultiArityTests
         Assert.Equal(["1:2", "1:7"], values);
     }
 
+    [Fact]
+    public void GeneratedExpressionAndStringSelectorsDoNotDistinctProjectedResults()
+    {
+        var model = new ArityModel();
+        var expressionValues = new List<string>();
+        var stringValues = new List<string>();
+
+        using var expression = model.WhenAnyValue(
+                value => value.P1, value => value.P2, value => value.P3, value => value.P4,
+                value => value.P5, value => value.P6, value => value.P7, value => value.P8,
+                value => value.P9, value => value.P10, value => value.P11, value => value.P12,
+                static (_, _, _, _, _, _, _, _, _, _, _, _) => "same")
+            .Subscribe(expressionValues.Add);
+        using var byName = model.WhenAnyValue(
+                nameof(ArityModel.P1), nameof(ArityModel.P2), nameof(ArityModel.P3),
+                nameof(ArityModel.P4), nameof(ArityModel.P5), nameof(ArityModel.P6),
+                nameof(ArityModel.P7), nameof(ArityModel.P8), nameof(ArityModel.P9),
+                nameof(ArityModel.P10), nameof(ArityModel.P11), nameof(ArityModel.P12),
+                static (int _, int _, int _, int _, int _, int _, int _, int _, int _, int _, int _, int _) =>
+                    "same")
+            .Subscribe(stringValues.Add);
+
+        model.P1 = 20;
+        model.P12 = 30;
+        model.P12 = 30;
+
+        Assert.Equal(["same", "same", "same"], expressionValues);
+        Assert.Equal(expressionValues, stringValues);
+    }
+
+    [Fact]
+    public void GeneratedTypedSelectorRetainsProjectedResultDistinctness()
+    {
+        var model = new ArityModel();
+        var values = new List<string>();
+
+        using var subscription = model.WhenAnyValue(
+                Paths.P1,
+                Paths.P2,
+                Paths.P3,
+                static (_, _, _) => "same")
+            .Subscribe(values.Add);
+
+        model.P1 = 20;
+        model.P2 = 30;
+
+        Assert.Equal(["same"], values);
+    }
+
     private static void AssertInitial(IObservable<int> observable, int expected)
     {
         var actual = 0;

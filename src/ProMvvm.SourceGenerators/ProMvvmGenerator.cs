@@ -385,23 +385,42 @@ internal static class MultiArityEmitter
 
         builder.AppendLine("        bool isDistinct = true,")
             .AppendLine("        IEqualityComparer<TResult>? comparer = null)")
-            .AppendLine("        where TSource : class =>")
-            .AppendLine("        source.WhenAnyValue(");
+            .AppendLine("        where TSource : class")
+            .AppendLine("    {")
+            .AppendLine("        ArgumentNullException.ThrowIfNull(source);");
         for (var index = 1; index <= arity; index++)
         {
-            builder.Append("            ExpressionPropertyPath.Create(property")
+            builder.Append("        ArgumentNullException.ThrowIfNull(property")
                 .Append(index)
-                .AppendLine("),");
+                .AppendLine(");");
         }
 
-        builder.AppendLine("            selector,");
+        builder.AppendLine("        ArgumentNullException.ThrowIfNull(selector);");
         if (withAdapter)
         {
-            builder.AppendLine("            notificationAdapter,");
+            builder.AppendLine("        ArgumentNullException.ThrowIfNull(notificationAdapter);");
         }
 
-        builder.AppendLine("            isDistinct,")
-            .AppendLine("            comparer);")
+        builder.Append("        return new CombineLatestObservable<")
+            .Append(TypeParameters(arity))
+            .AppendLine(", TResult>(");
+        for (var index = 1; index <= arity; index++)
+        {
+            builder.Append("            source.WhenAnyValue(ExpressionPropertyPath.Create(property")
+                .Append(index)
+                .Append(')');
+            if (withAdapter)
+            {
+                builder.Append(", notificationAdapter");
+            }
+
+            builder.AppendLine(", isDistinct),");
+        }
+
+        builder.AppendLine("            selector,")
+            .AppendLine("            isDistinct && comparer is not null,")
+            .AppendLine("            comparer ?? EqualityComparer<TResult>.Default);")
+            .AppendLine("    }")
             .AppendLine();
     }
 
@@ -424,10 +443,21 @@ internal static class MultiArityEmitter
             .AppendLine("    {")
             .AppendLine("        ArgumentNullException.ThrowIfNull(source);")
             .AppendLine("        ArgumentNullException.ThrowIfNull(selector);")
-            .AppendLine("        return source.WhenAnyValue(");
-        EmitArguments(builder, arity, "StringPropertyPath.Create<TSource, T{0}>(source, property{0}Name)");
+            .Append("        return new CombineLatestObservable<")
+            .Append(TypeParameters(arity))
+            .AppendLine(", TResult>(");
+        for (var index = 1; index <= arity; index++)
+        {
+            builder.Append("            source.WhenAnyValue(StringPropertyPath.Create<TSource, T")
+                .Append(index)
+                .Append(">(source, property")
+                .Append(index)
+                .AppendLine("Name), isDistinct),");
+        }
+
         builder.AppendLine("            selector,")
-            .AppendLine("            isDistinct);")
+            .AppendLine("            false,")
+            .AppendLine("            EqualityComparer<TResult>.Default);")
             .AppendLine("    }")
             .AppendLine();
     }
@@ -691,13 +721,17 @@ internal static class MultiArityEmitter
             .AppendLine("                return;")
             .AppendLine("            }")
             .AppendLine()
-            .AppendLine("            if (isDistinct && _hasLastResult && comparer.Equals(_lastResult!, result))")
+            .AppendLine("            if (isDistinct)")
             .AppendLine("            {")
-            .AppendLine("                return;")
+            .AppendLine("                if (_hasLastResult && comparer.Equals(_lastResult!, result))")
+            .AppendLine("                {")
+            .AppendLine("                    return;")
+            .AppendLine("                }")
+            .AppendLine()
+            .AppendLine("                _lastResult = result;")
+            .AppendLine("                _hasLastResult = true;")
             .AppendLine("            }")
             .AppendLine()
-            .AppendLine("            _lastResult = result;")
-            .AppendLine("            _hasLastResult = true;")
             .AppendLine("            try")
             .AppendLine("            {")
             .AppendLine("                observer.OnNext(result);")

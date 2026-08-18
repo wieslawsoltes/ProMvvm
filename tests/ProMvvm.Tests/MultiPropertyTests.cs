@@ -107,6 +107,52 @@ public sealed class MultiPropertyTests
     }
 
     [Fact]
+    public void ExpressionAndStringSelectorsDistinctInputsButNotProjectedResults()
+    {
+        var model = new ObservableModel { Name = "a", Count = 1 };
+        var expressionValues = new List<string>();
+        var stringValues = new List<string>();
+
+#pragma warning disable IL2026
+        using var expression = model.WhenAnyValue(
+            value => value.Name,
+            value => value.Count,
+            static (_, _) => "same").Subscribe(expressionValues.Add);
+        using var byName = model.WhenAnyValue<ObservableModel, string, string?, int>(
+            nameof(ObservableModel.Name),
+            nameof(ObservableModel.Count),
+            static (_, _) => "same").Subscribe(stringValues.Add);
+#pragma warning restore IL2026
+
+        model.Name = "b";
+        model.Count = 2;
+        model.Count = 2;
+
+        Assert.Equal(["same", "same", "same"], expressionValues);
+        Assert.Equal(expressionValues, stringValues);
+    }
+
+    [Fact]
+    public void ExpressionComparerExplicitlyOptsIntoProjectedResultDistinctness()
+    {
+        var model = new ObservableModel { Name = "a", Count = 1 };
+        var values = new List<string>();
+
+#pragma warning disable IL2026
+        using var subscription = model.WhenAnyValue(
+            value => value.Name,
+            value => value.Count,
+            static (_, _) => "same",
+            comparer: StringComparer.Ordinal).Subscribe(values.Add);
+#pragma warning restore IL2026
+
+        model.Name = "b";
+        model.Count = 2;
+
+        Assert.Equal(["same"], values);
+    }
+
+    [Fact]
     public void SelectorFailureTerminatesBothSources()
     {
         var model = new ObservableModel { Name = "a", Count = 1 };

@@ -128,13 +128,17 @@ internal sealed class CombineLatestObservable<T1, T2, TResult>(
                 return;
             }
 
-            if (isDistinct && _hasLastResult && comparer.Equals(_lastResult!, result))
+            if (isDistinct)
             {
-                return;
+                if (_hasLastResult && comparer.Equals(_lastResult!, result))
+                {
+                    return;
+                }
+
+                _lastResult = result;
+                _hasLastResult = true;
             }
 
-            _lastResult = result;
-            _hasLastResult = true;
             try
             {
                 observer.OnNext(result);

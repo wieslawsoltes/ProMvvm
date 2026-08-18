@@ -63,13 +63,20 @@ public static partial class WhenAnyValueMultiExtensions
         Func<T1, T2, TResult> selector,
         bool isDistinct = true,
         IEqualityComparer<TResult>? comparer = null)
-        where TSource : class =>
-        source.WhenAnyValue(
-            ExpressionPropertyPath.Create(property1),
-            ExpressionPropertyPath.Create(property2),
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(property1);
+        ArgumentNullException.ThrowIfNull(property2);
+        ArgumentNullException.ThrowIfNull(selector);
+
+        return new CombineLatestObservable<T1, T2, TResult>(
+            source.WhenAnyValue(ExpressionPropertyPath.Create(property1), isDistinct),
+            source.WhenAnyValue(ExpressionPropertyPath.Create(property2), isDistinct),
             selector,
-            isDistinct,
-            comparer);
+            isDistinct && comparer is not null,
+            comparer ?? EqualityComparer<TResult>.Default);
+    }
 
     /// <summary>ReactiveUI-compatible two-property string-name projection overload.</summary>
     [RequiresUnreferencedCode("String property compatibility resolves public property metadata by name. Use typed PropertyPath arguments for trimming and NativeAOT.")]
@@ -83,11 +90,16 @@ public static partial class WhenAnyValueMultiExtensions
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(selector);
-        return source.WhenAnyValue(
-            StringPropertyPath.Create<TSource, T1>(source, property1Name),
-            StringPropertyPath.Create<TSource, T2>(source, property2Name),
+        return new CombineLatestObservable<T1, T2, TResult>(
+            source.WhenAnyValue(
+                StringPropertyPath.Create<TSource, T1>(source, property1Name),
+                isDistinct),
+            source.WhenAnyValue(
+                StringPropertyPath.Create<TSource, T2>(source, property2Name),
+                isDistinct),
             selector,
-            isDistinct);
+            false,
+            EqualityComparer<TResult>.Default);
     }
 
     /// <summary>Observes two expression paths through an explicit adapter.</summary>
@@ -100,14 +112,27 @@ public static partial class WhenAnyValueMultiExtensions
         IPropertyNotificationAdapter notificationAdapter,
         bool isDistinct = true,
         IEqualityComparer<TResult>? comparer = null)
-        where TSource : class =>
-        source.WhenAnyValue(
-            ExpressionPropertyPath.Create(property1),
-            ExpressionPropertyPath.Create(property2),
+        where TSource : class
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(property1);
+        ArgumentNullException.ThrowIfNull(property2);
+        ArgumentNullException.ThrowIfNull(selector);
+        ArgumentNullException.ThrowIfNull(notificationAdapter);
+
+        return new CombineLatestObservable<T1, T2, TResult>(
+            source.WhenAnyValue(
+                ExpressionPropertyPath.Create(property1),
+                notificationAdapter,
+                isDistinct),
+            source.WhenAnyValue(
+                ExpressionPropertyPath.Create(property2),
+                notificationAdapter,
+                isDistinct),
             selector,
-            notificationAdapter,
-            isDistinct,
-            comparer);
+            isDistinct && comparer is not null,
+            comparer ?? EqualityComparer<TResult>.Default);
+    }
 
     /// <summary>Observes two AOT-safe paths and emits tuples.</summary>
     public static IObservable<(T1 Value1, T2 Value2)> WhenAnyValue<TSource, T1, T2>(
