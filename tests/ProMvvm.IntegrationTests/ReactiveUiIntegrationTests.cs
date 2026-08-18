@@ -50,6 +50,40 @@ public sealed class ReactiveUiIntegrationTests
         Assert.Equal([1, 2], proValues);
         Assert.Equal(proValues, reactiveUiValues);
     }
+
+    [Fact]
+    public void ExpressionAndStringMigrationOverloadsMatchReactiveUiReactive()
+    {
+        var model = new ReactiveViewModel();
+        var proExpressionValues = new List<string>();
+        var proStringValues = new List<string>();
+        var reactiveExpressionValues = new List<string>();
+        var reactiveStringValues = new List<string>();
+
+#pragma warning disable IL2026
+        using var proExpression = WhenAnyValueExtensions.WhenAnyValue<ReactiveViewModel, string, int>(
+                model,
+                value => value.Count,
+                static value => $"#{value}")
+            .Subscribe(proExpressionValues.Add);
+        using var proString = WhenAnyValueExtensions.WhenAnyValue<ReactiveViewModel, string, int>(
+                model,
+                nameof(ReactiveViewModel.Count),
+                static value => $"#{value}")
+            .Subscribe(proStringValues.Add);
+#pragma warning restore IL2026
+        using var reactiveExpression = ReactiveUiAdapter.ObserveSelectedCount(model)
+            .Subscribe(reactiveExpressionValues.Add);
+        using var reactiveString = ReactiveUiAdapter.ObserveSelectedCountByName(model)
+            .Subscribe(reactiveStringValues.Add);
+
+        model.Count = 2;
+
+        Assert.Equal(["#1", "#2"], proExpressionValues);
+        Assert.Equal(proExpressionValues, proStringValues);
+        Assert.Equal(proExpressionValues, reactiveExpressionValues);
+        Assert.Equal(proExpressionValues, reactiveStringValues);
+    }
 }
 
 internal static class ReactiveUiAdapter
@@ -59,4 +93,16 @@ internal static class ReactiveUiAdapter
 
     public static IObservable<int> ObserveCount(ReactiveViewModel model) =>
         ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue(model, value => value.Count);
+
+    public static IObservable<string> ObserveSelectedCount(ReactiveViewModel model) =>
+        ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue(
+            model,
+            value => value.Count,
+            (Func<int, string>)(static value => $"#{value}"));
+
+    public static IObservable<string> ObserveSelectedCountByName(ReactiveViewModel model) =>
+        ReactiveUI.Reactive.WhenAnyMixins.WhenAnyValue<ReactiveViewModel, string, int>(
+            model,
+            nameof(ReactiveViewModel.Count),
+            static value => $"#{value}");
 }

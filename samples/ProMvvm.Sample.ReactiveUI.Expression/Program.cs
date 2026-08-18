@@ -18,6 +18,13 @@ using var categorySubscription = viewModel
     .Select(static category => $"Category: {category}")
     .Subscribe(Console.WriteLine);
 
+using var lengthSubscription = viewModel
+    .WhenAnyValue<MainViewModel, int, string>(
+        model => model.SearchText,
+        static text => text.Length)
+    .Select(static length => $"Search length: {length}")
+    .Subscribe(Console.WriteLine);
+
 using var readinessSubscription = viewModel
     .WhenAnyValue(
         model => model.SearchText,
@@ -31,6 +38,15 @@ using var stateSubscription = viewModel
         model => model.SearchText,
         model => model.MinimumLength)
     .Select(static state => $"State: '{state.Item1}', minimum {state.Item2}")
+    .Subscribe(Console.WriteLine);
+
+using var summarySubscription = viewModel
+    .WhenAnyValue(
+        model => model.SearchText,
+        model => model.MinimumLength,
+        model => model.Options!.Category,
+        static (text, minimumLength, category) =>
+            $"{category}: '{text}' ({text.Length}/{minimumLength})")
     .Subscribe(Console.WriteLine);
 #pragma warning restore IL2026
 
