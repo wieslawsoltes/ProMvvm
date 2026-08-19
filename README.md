@@ -438,6 +438,10 @@ Release unit tests enforce 100% line coverage, at least 98% branch coverage, and
 
 CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed. Package smoke tests restore from the freshly built local feed and validate both automatic generator installation through `ProMvvm` and an explicit `ProMvvm.SourceGenerators` reference.
 
+## Releasing
+
+Version tags drive the release workflow, which revalidates the complete test and package-smoke surface, publishes both packages to NuGet.org through trusted publishing, and creates a GitHub release containing the packages, runtime symbols, and SHA-256 checksums. See the [release guide](docs/RELEASING.md) for repository setup and the release procedure.
+
 ## Benchmarks
 
 The BenchmarkDotNet suite compares typed, expression, and direct string-name ProMvvm paths with both ReactiveUI 24 distributions under the same notification models:
