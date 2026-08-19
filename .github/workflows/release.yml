@@ -4,9 +4,15 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to validate and publish
+        required: true
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -16,20 +22,25 @@ jobs:
     permissions:
       contents: read
     outputs:
+      tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       prerelease: ${{ steps.release.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.201
       - name: Validate tag and package versions
         id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           git fetch origin main --no-tags
-          ./eng/validate-release.sh "$GITHUB_REF_NAME" origin/main
+          ./eng/validate-release.sh "$RELEASE_TAG" origin/main
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
       - name: Build
         run: dotnet build ProMvvm.slnx -c Release
       - name: Test runtime
@@ -72,7 +83,6 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/setup-dotnet@v5
         with:
@@ -81,16 +91,15 @@ jobs:
         with:
           name: release-packages-${{ needs.validate.outputs.version }}
           path: artifacts/packages
-      - name: Sign in to NuGet.org with trusted publishing
-        id: nuget-login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ vars.NUGET_USER }}
       - name: Publish packages
         env:
-          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
+          if [[ -z "$NUGET_API_KEY" ]]; then
+            echo "The NUGET_API_KEY environment secret is not configured." >&2
+            exit 1
+          fi
           dotnet nuget push "artifacts/packages/ProMvvm.SourceGenerators.$RELEASE_VERSION.nupkg" \
             --api-key "$NUGET_API_KEY" \
             --source https://api.nuget.org/v3/index.json \
@@ -115,6 +124,7 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
           RELEASE_PRERELEASE: ${{ needs.validate.outputs.prerelease }}
         run: |
@@ -127,6 +137,6 @@ jobs:
           if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
             release_options+=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" \
             artifacts/packages/* \
             "${release_options[@]}"

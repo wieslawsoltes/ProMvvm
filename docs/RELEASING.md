@@ -6,22 +6,16 @@ Releases are produced by the tag-driven [release workflow](../.github/workflows/
 
 Create a GitHub environment named `release`. Protect it with the reviewers and deployment-branch or tag rules appropriate for the repository. Both publishing jobs use this environment.
 
-Add the NuGet.org profile name as an Actions repository variable named `NUGET_USER`:
+Add a NuGet.org API key with permission to push new packages and versions as an Actions repository secret named `NUGET_API_KEY`:
 
 ```bash
-gh variable set NUGET_USER --repo wieslawsoltes/ProMvvm --body '<nuget.org-profile-name>'
+gh secret set NUGET_API_KEY \
+  --repo wieslawsoltes/ProMvvm
 ```
 
-Configure a NuGet.org trusted publishing policy for each package, `ProMvvm` and `ProMvvm.SourceGenerators`, with these values:
+The command prompts for the key without writing it to shell history. Scope the key to the `ProMvvm` and `ProMvvm.SourceGenerators` package IDs when those IDs already exist; the first publication requires permission to push new packages.
 
-| Policy field | Value |
-| --- | --- |
-| Repository owner | `wieslawsoltes` |
-| Repository | `ProMvvm` |
-| Workflow file | `release.yml` |
-| Environment | `release` |
-
-The workflow uses GitHub's OpenID Connect identity through `NuGet/login@v1`; it does not need or store a long-lived NuGet API key. The NuGet.org profile name in `NUGET_USER` must match the account that owns the trusted publishing policies.
+Rotate the API key according to the repository's credential policy and update the environment secret before the old key expires.
 
 ## Publish a release
 
@@ -42,6 +36,18 @@ git push origin v0.1.0
 Use `git tag -a` instead of `git tag -s` if a signing key is not configured. Prerelease versions and tags such as `0.2.0-beta.1` and `v0.2.0-beta.1` are supported and create a GitHub prerelease.
 
 Do not create the GitHub release manually. The tag push is the release trigger.
+
+### Retry an existing tag
+
+If validation or publishing is cancelled or fails before completion, rerun the existing immutable tag through the manual workflow input:
+
+```bash
+gh workflow run release.yml \
+  --repo wieslawsoltes/ProMvvm \
+  --field tag=v0.1.0
+```
+
+The manual run checks out and revalidates the tag itself; it does not publish the current `main` contents under an older version. NuGet pushes use `--skip-duplicate`, so retrying after a partial package upload is safe.
 
 ## Release gates and outputs
 
