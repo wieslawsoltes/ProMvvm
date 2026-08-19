@@ -50,22 +50,11 @@ jobs:
           -o artifacts/packages
       - name: Validate package contents
         run: ./eng/validate-packages.sh "${{ steps.release.outputs.version }}"
-      - name: Restore automatic generator package smoke test
+      - name: Test all package and framework integrations
         run: >-
-          dotnet restore tests/ProMvvm.PackageSmoke
-          --no-cache
-          --source artifacts/packages
-      - name: Run automatic generator package smoke test
-        run: dotnet run --project tests/ProMvvm.PackageSmoke -c Release --no-restore
-      - name: Restore explicit generator package smoke test
-        run: >-
-          dotnet restore tests/ProMvvm.SourceGenerators.PackageSmoke
-          --no-cache
-          --source artifacts/packages
-      - name: Run explicit generator package smoke test
-        run: >-
-          dotnet run --project tests/ProMvvm.SourceGenerators.PackageSmoke
-          -c Release --no-restore
+          ./eng/run-package-integrations.sh
+          artifacts/packages
+          "${{ steps.release.outputs.version }}"
       - name: Generate checksums
         working-directory: artifacts/packages
         run: sha256sum -- ./*.nupkg ./*.snupkg > SHA256SUMS
