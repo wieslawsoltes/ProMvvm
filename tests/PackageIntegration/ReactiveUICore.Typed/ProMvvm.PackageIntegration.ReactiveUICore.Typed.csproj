@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../PackageIntegration.props" />
+  <ItemGroup>
+    <Compile Include="../Shared/ReactiveUICoreModels.cs" Link="ReactiveUICoreModels.cs" />
+    <PackageReference Include="ProMvvm" Version="$(ProMvvmPackageVersion)" />
+    <PackageReference Include="ReactiveUI" Version="24.0.0" />
+  </ItemGroup>
+</Project>

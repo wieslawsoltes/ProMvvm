@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../PackageIntegration.props" />
+  <ItemGroup>
+    <Compile Include="../Shared/CommunityToolkitModels.cs" Link="CommunityToolkitModels.cs" />
+    <PackageReference Include="ProMvvm" Version="$(ProMvvmPackageVersion)" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+</Project>
