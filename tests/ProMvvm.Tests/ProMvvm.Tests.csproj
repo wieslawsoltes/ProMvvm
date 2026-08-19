@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <CollectCoverage Condition="'$(Configuration)' == 'Release'">true</CollectCoverage>
+    <CoverletOutput>$(MSBuildProjectDirectory)/../../artifacts/coverage/unit/</CoverletOutput>
+    <CoverletOutputFormat>json,cobertura</CoverletOutputFormat>
+    <Threshold>100,98,100</Threshold>
+    <ThresholdType>line,branch,method</ThresholdType>
+    <ThresholdStat>total</ThresholdStat>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/ProMvvm/ProMvvm.csproj" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="System.Reactive" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
+    <PackageReference Include="coverlet.msbuild" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

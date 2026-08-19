@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ProMvvm/ProMvvm.csproj" />
+    <Project Path="src/ProMvvm.SourceGenerators/ProMvvm.SourceGenerators.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ProMvvm.Tests/ProMvvm.Tests.csproj" />
+    <Project Path="tests/ProMvvm.IntegrationTests/ProMvvm.IntegrationTests.csproj" />
+    <Project Path="tests/ProMvvm.ReactiveUiCoreIntegrationTests/ProMvvm.ReactiveUiCoreIntegrationTests.csproj" />
+    <Project Path="tests/ProMvvm.SourceGenerators.Tests/ProMvvm.SourceGenerators.Tests.csproj" />
+    <Project Path="tests/ProMvvm.AotSmoke/ProMvvm.AotSmoke.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/ProMvvm.Sample.ReactiveUI/ProMvvm.Sample.ReactiveUI.csproj" />
+    <Project Path="samples/ProMvvm.Sample.ReactiveUI.Expression/ProMvvm.Sample.ReactiveUI.Expression.csproj" />
+    <Project Path="samples/ProMvvm.Sample.CommunityToolkit/ProMvvm.Sample.CommunityToolkit.csproj" />
+    <Project Path="samples/ProMvvm.Sample.CommunityToolkit.Expression/ProMvvm.Sample.CommunityToolkit.Expression.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/ProMvvm.Benchmarks/ProMvvm.Benchmarks.csproj" />
+  </Folder>
+</Solution>
