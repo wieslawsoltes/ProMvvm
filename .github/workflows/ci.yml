@@ -41,6 +41,11 @@ jobs:
       - if: runner.os == 'Linux'
         run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages
       - if: runner.os == 'Linux'
+        name: Validate package contents
+        run: |
+          package_version="$(dotnet msbuild src/ProMvvm/ProMvvm.csproj -nologo -getProperty:PackageVersion -p:Configuration=Release)"
+          ./eng/validate-packages.sh "$package_version"
+      - if: runner.os == 'Linux'
         run: >-
           dotnet restore tests/ProMvvm.PackageSmoke
           --no-cache
