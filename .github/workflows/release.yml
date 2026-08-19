@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.201
+      - name: Validate tag and package versions
+        id: release
+        run: |
+          git fetch origin main --no-tags
+          ./eng/validate-release.sh "$GITHUB_REF_NAME" origin/main
+      - name: Build
+        run: dotnet build ProMvvm.slnx -c Release
+      - name: Test runtime
+        run: dotnet test tests/ProMvvm.Tests -c Release --no-build
+      - name: Test source generators
+        run: dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release --no-build
+      - name: Test integration
+        run: dotnet test tests/ProMvvm.IntegrationTests -c Release --no-build
+      - name: Test ReactiveUI core integration
+        run: dotnet test tests/ProMvvm.ReactiveUiCoreIntegrationTests -c Release --no-build
+      - name: Pack source generators
+        run: >-
+          dotnet pack src/ProMvvm.SourceGenerators -c Release --no-build
+          -o artifacts/packages
+      - name: Pack runtime
+        run: >-
+          dotnet pack src/ProMvvm -c Release --no-build
+          -o artifacts/packages
+      - name: Validate package contents
+        run: ./eng/validate-packages.sh "${{ steps.release.outputs.version }}"
+      - name: Restore automatic generator package smoke test
+        run: >-
+          dotnet restore tests/ProMvvm.PackageSmoke
+          --no-cache
+          --source artifacts/packages
+      - name: Run automatic generator package smoke test
+        run: dotnet run --project tests/ProMvvm.PackageSmoke -c Release --no-restore
+      - name: Restore explicit generator package smoke test
+        run: >-
+          dotnet restore tests/ProMvvm.SourceGenerators.PackageSmoke
+          --no-cache
+          --source artifacts/packages
+      - name: Run explicit generator package smoke test
+        run: >-
+          dotnet run --project tests/ProMvvm.SourceGenerators.PackageSmoke
+          -c Release --no-restore
+      - name: Generate checksums
+        working-directory: artifacts/packages
+        run: sha256sum -- ./*.nupkg ./*.snupkg > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-packages-${{ steps.release.outputs.version }}
+          path: artifacts/packages
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-nuget:
+    name: Publish to NuGet.org
+    needs: validate
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.201
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages-${{ needs.validate.outputs.version }}
+          path: artifacts/packages
+      - name: Sign in to NuGet.org with trusted publishing
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - name: Publish packages
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          dotnet nuget push "artifacts/packages/ProMvvm.SourceGenerators.$RELEASE_VERSION.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+          dotnet nuget push "artifacts/packages/ProMvvm.$RELEASE_VERSION.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+  publish-github:
+    name: Publish GitHub release
+    needs: [validate, publish-nuget]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-packages-${{ needs.validate.outputs.version }}
+          path: artifacts/packages
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          release_options=(
+            --repo "$GITHUB_REPOSITORY"
+            --verify-tag
+            --generate-notes
+            --title "ProMvvm $RELEASE_VERSION"
+          )
+          if [[ "$RELEASE_PRERELEASE" == "true" ]]; then
+            release_options+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            artifacts/packages/* \
+            "${release_options[@]}"
