@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../PackageIntegration.props" />
+  <ItemGroup>
+    <Compile Include="../Shared/PlainModels.cs" Link="PlainModels.cs" />
+    <PackageReference Include="ProMvvm" Version="$(ProMvvmPackageVersion)" />
+  </ItemGroup>
+</Project>

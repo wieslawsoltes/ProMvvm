@@ -430,17 +430,19 @@ dotnet test tests/ProMvvm.SourceGenerators.Tests -c Release
 dotnet test tests/ProMvvm.IntegrationTests -c Release
 dotnet test tests/ProMvvm.ReactiveUiCoreIntegrationTests -c Release
 
+./eng/test-local-packages.sh Release
+
 dotnet publish tests/ProMvvm.AotSmoke -c Release -r osx-arm64 --self-contained
 ./tests/ProMvvm.AotSmoke/bin/Release/net10.0/osx-arm64/publish/ProMvvm.AotSmoke
 ```
 
 Release unit tests enforce 100% line coverage, at least 98% branch coverage, and 100% method coverage. Dedicated generator tests validate emitted descriptors and overloads; integration tests compile and execute both source-generator ecosystems.
 
-CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed. Package smoke tests restore from the freshly built local feed and validate both automatic generator installation through `ProMvvm` and an explicit `ProMvvm.SourceGenerators` reference.
+CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed. A dedicated local-package CI job packs both NuGet packages and runs 12 dependency-isolated integration projects across plain INPC, explicit adapters, CommunityToolkit.Mvvm, ReactiveUI core, and ReactiveUI.Reactive, with separate typed, expression, and explicit-generator graphs. See the [local NuGet integration matrix](tests/PackageIntegration/README.md) for the exact coverage and focused commands.
 
 ## Releasing
 
-Version tags drive the release workflow, which revalidates the complete test and package-smoke surface, publishes both packages to NuGet.org through trusted publishing, and creates a GitHub release containing the packages, runtime symbols, and SHA-256 checksums. See the [release guide](docs/RELEASING.md) for repository setup and the release procedure.
+Version tags drive the release workflow, which revalidates the complete test and local-package integration surface, publishes both packages to NuGet.org through trusted publishing, and creates a GitHub release containing the packages, runtime symbols, and SHA-256 checksums. See the [release guide](docs/RELEASING.md) for repository setup and the release procedure.
 
 ## Benchmarks
 

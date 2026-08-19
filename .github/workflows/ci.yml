@@ -17,8 +17,8 @@ jobs:
         os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.201
       - run: dotnet build ProMvvm.slnx -c Release
@@ -37,42 +37,25 @@ jobs:
       - run: dotnet run --project samples/ProMvvm.Sample.CommunityToolkit.Expression -c Release --no-build
       - run: dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release --no-build -- --list flat
       - if: runner.os == 'Linux'
-        run: dotnet pack src/ProMvvm.SourceGenerators -c Release --no-build -o artifacts/packages
-      - if: runner.os == 'Linux'
-        run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages
-      - if: runner.os == 'Linux'
-        name: Validate package contents
-        run: |
-          package_version="$(dotnet msbuild src/ProMvvm/ProMvvm.csproj -nologo -getProperty:PackageVersion -p:Configuration=Release)"
-          ./eng/validate-packages.sh "$package_version"
-      - if: runner.os == 'Linux'
-        run: >-
-          dotnet restore tests/ProMvvm.PackageSmoke
-          --no-cache
-          --source artifacts/packages
-          --source https://api.nuget.org/v3/index.json
-      - if: runner.os == 'Linux'
-        run: dotnet run --project tests/ProMvvm.PackageSmoke -c Release --no-restore
-      - if: runner.os == 'Linux'
-        run: >-
-          dotnet restore tests/ProMvvm.SourceGenerators.PackageSmoke
-          --no-cache
-          --source artifacts/packages
-          --source https://api.nuget.org/v3/index.json
-      - if: runner.os == 'Linux'
-        run: >-
-          dotnet run --project tests/ProMvvm.SourceGenerators.PackageSmoke
-          -c Release --no-restore
-      - if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: artifacts/coverage
-      - if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
+
+  package-integration:
+    name: Local NuGet package integrations
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
-          name: packages
-          path: artifacts/packages
+          dotnet-version: 10.0.201
+      - run: ./eng/test-local-packages.sh Release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: local-nuget-packages
+          path: artifacts/package-integration/feed
+          if-no-files-found: error
 
   trimmed:
     name: Full trim (${{ matrix.rid }})
@@ -91,8 +74,8 @@ jobs:
             executable: ./artifacts/trim/ProMvvm.AotSmoke
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.201
       - run: >-
@@ -120,8 +103,8 @@ jobs:
             executable: ./artifacts/aot/ProMvvm.AotSmoke
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.201
       - run: >-
@@ -135,8 +118,8 @@ jobs:
     name: NativeAOT framework samples
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.201
       - run: >-
