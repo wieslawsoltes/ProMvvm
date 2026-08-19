@@ -37,12 +37,37 @@ jobs:
       - run: dotnet run --project samples/ProMvvm.Sample.CommunityToolkit.Expression -c Release --no-build
       - run: dotnet run --project benchmarks/ProMvvm.Benchmarks -c Release --no-build -- --list flat
       - if: runner.os == 'Linux'
+        run: dotnet pack src/ProMvvm.SourceGenerators -c Release --no-build -o artifacts/packages
+      - if: runner.os == 'Linux'
         run: dotnet pack src/ProMvvm -c Release --no-build -o artifacts/packages
+      - if: runner.os == 'Linux'
+        run: >-
+          dotnet restore tests/ProMvvm.PackageSmoke
+          --no-cache
+          --source artifacts/packages
+          --source https://api.nuget.org/v3/index.json
+      - if: runner.os == 'Linux'
+        run: dotnet run --project tests/ProMvvm.PackageSmoke -c Release --no-restore
+      - if: runner.os == 'Linux'
+        run: >-
+          dotnet restore tests/ProMvvm.SourceGenerators.PackageSmoke
+          --no-cache
+          --source artifacts/packages
+          --source https://api.nuget.org/v3/index.json
+      - if: runner.os == 'Linux'
+        run: >-
+          dotnet run --project tests/ProMvvm.SourceGenerators.PackageSmoke
+          -c Release --no-restore
       - if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: artifacts/coverage
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages
 
   trimmed:
     name: Full trim (${{ matrix.rid }})
