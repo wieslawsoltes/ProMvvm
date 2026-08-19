@@ -1,6 +1,6 @@
 # Releasing ProMvvm
 
-Releases are produced by the tag-driven [release workflow](../.github/workflows/release.yml). The workflow validates, tests, packs, and smoke-tests both NuGet packages before it publishes them to NuGet.org and creates the matching GitHub release.
+Releases are produced by the tag-driven [release workflow](../.github/workflows/release.yml). The workflow validates, tests, packs, and runs the complete local NuGet integration matrix before it publishes both packages to NuGet.org and creates the matching GitHub release.
 
 ## One-time setup
 
@@ -50,7 +50,8 @@ Before publishing, the workflow verifies that:
 - the tag has a supported version form and exactly matches both project package versions;
 - the tag resolves to the checked-out commit and that commit is reachable from `main`;
 - the solution builds and all runtime, generator, and integration test suites pass;
-- both the automatic and explicit source-generator package consumption modes restore and run from the local package output;
+- all 12 isolated runtime, explicit-generator, adapter, CommunityToolkit.Mvvm, ReactiveUI core, and ReactiveUI.Reactive package projects restore and pass from the local package output;
+- NuGet restore metadata proves each ProMvvm package dependency came from that local output rather than NuGet.org or a machine cache;
 - the generator package exposes only its analyzer asset, while the runtime package contains the runtime assembly and retains its generator dependency.
 
 The workflow publishes `ProMvvm.SourceGenerators` before `ProMvvm`, uploads the runtime symbol package automatically with the runtime package, and attaches all packages plus `SHA256SUMS` to the generated GitHub release. NuGet pushes use `--skip-duplicate`, so a failed publishing job can be rerun safely after a partial NuGet.org upload.
