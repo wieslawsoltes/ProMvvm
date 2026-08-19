@@ -4,9 +4,18 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <IsPackable>false</IsPackable>
+    <IsPackable>true</IsPackable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <PackageId>ProMvvm.SourceGenerators</PackageId>
+    <Version>$(ProMvvmPackageVersion)</Version>
+    <Authors>Wiesław Šoltés</Authors>
+    <Description>Source-generated, reflection-free property descriptors for ProMvvm.</Description>
+    <PackageTags>mvvm;reactive;reactiveui;aot;source-generator;roslyn</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/wieslawsoltes/ProMvvm</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PublishAot>false</PublishAot>
     <PublishTrimmed>false</PublishTrimmed>
     <SelfContained>false</SelfContained>
@@ -14,5 +23,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="$(OutputPath)$(AssemblyName).dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
   </ItemGroup>
 </Project>

@@ -8,8 +8,8 @@
     <IsTrimmable>true</IsTrimmable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>ProMvvm</PackageId>
-    <Version>0.1.0-alpha.1</Version>
-    <Authors>ProMvvm contributors</Authors>
+    <Version>$(ProMvvmPackageVersion)</Version>
+    <Authors>Wiesław Šoltés</Authors>
     <Description>A high-performance, AOT-first MVVM observation library with ReactiveUI WhenAnyValue compatibility.</Description>
     <PackageTags>mvvm;reactive;reactiveui;aot;inotifypropertychanged</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -23,11 +23,8 @@
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <ProjectReference Include="../ProMvvm.SourceGenerators/ProMvvm.SourceGenerators.csproj"
                       OutputItemType="Analyzer"
-                      GlobalPropertiesToRemove="PublishAot;PublishTrimmed;TrimMode;SelfContained;RuntimeIdentifier"
-                      ReferenceOutputAssembly="false" />
-    <None Include="../ProMvvm.SourceGenerators/bin/$(Configuration)/netstandard2.0/ProMvvm.SourceGenerators.dll"
-          Pack="true"
-          PackagePath="analyzers/dotnet/cs"
-          Visible="false" />
+                      IncludeAssets="analyzers;build;buildtransitive"
+                      PrivateAssets="compile;runtime"
+                      GlobalPropertiesToRemove="PublishAot;PublishTrimmed;TrimMode;SelfContained;RuntimeIdentifier" />
   </ItemGroup>
 </Project>
