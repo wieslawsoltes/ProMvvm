@@ -1,5 +1,6 @@
 <Project>
   <PropertyGroup>
+    <ProMvvmPackageVersion>0.1.0</ProMvvmPackageVersion>
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

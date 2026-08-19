@@ -9,9 +9,10 @@
 
 | Package | Current version | Contents | Availability |
 | --- | --- | --- | --- |
-| [`ProMvvm`](https://www.nuget.org/packages/ProMvvm/) | `0.1.0` | Runtime, `WhenAnyValue` extensions, typed property paths, notification adapters, and the property-descriptor source generator | NuGet.org |
+| [`ProMvvm`](https://www.nuget.org/packages/ProMvvm/) | `0.1.0` | Runtime, `WhenAnyValue` extensions, typed property paths, and notification adapters; installs the generator automatically | NuGet.org |
+| [`ProMvvm.SourceGenerators`](https://www.nuget.org/packages/ProMvvm.SourceGenerators/) | `0.1.0` | Compile-time generation of reflection-free property descriptors | NuGet.org |
 
-`ProMvvm.SourceGenerators` is bundled inside the `ProMvvm` package as a build-time analyzer. It is not a separate package that applications need to reference.
+Installing `ProMvvm` is the recommended path: it brings in the matching `ProMvvm.SourceGenerators` analyzer automatically. The generator is also published separately for advanced build setups that want an explicit analyzer reference. It has no runtime assets, but its generated descriptors reference the `ProMvvm` runtime API.
 
 ProMvvm is a .NET 10-first, high-performance MVVM property-observation library. The `0.1.0` release focuses on `WhenAnyValue`: a cold `IObservable<T>` engine with an AOT-first typed API and a ReactiveUI-compatible expression migration API.
 
@@ -26,6 +27,8 @@ ProMvvm targets .NET 10. Install it from NuGet.org with:
 ```bash
 dotnet add <your-project.csproj> package ProMvvm --version 0.1.0
 ```
+
+This single reference installs the runtime and the matching source generator. No second package command is needed for normal applications.
 
 System.Reactive is optional. Add it when you want Rx operators such as `Where`, `Select`, and the `Subscribe(Action<T>)` convenience overload:
 
@@ -110,7 +113,24 @@ public partial class SearchOptions : ObservableObject
 var searchText = viewModel.WhenAnyValue(SearchViewModelPropertyPaths.SearchText);
 ```
 
-The generator understands ordinary properties, CommunityToolkit.Mvvm `[ObservableProperty]` fields, and ReactiveUI.SourceGenerators `[Reactive]` fields. The generator ships in the main package and requires no runtime reflection.
+The generator understands ordinary properties, CommunityToolkit.Mvvm `[ObservableProperty]` fields, and ReactiveUI.SourceGenerators `[Reactive]` fields. The main package installs the matching analyzer package automatically, and generated descriptors require no runtime reflection.
+
+#### Explicit generator package reference
+
+Most applications should reference only `ProMvvm`. Library authors and advanced build setups can make the analyzer reference explicit—for example, to mark it private or control it independently in central package management:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="ProMvvm" Version="0.1.0" />
+  <PackageReference Include="ProMvvm.SourceGenerators"
+                    Version="0.1.0"
+                    PrivateAssets="all" />
+</ItemGroup>
+```
+
+The explicit reference resolves to the same analyzer version already required by `ProMvvm`; NuGet loads it once. `PrivateAssets="all"` is useful in a library when its consumers should not inherit the analyzer. If the runtime is supplied through a project or assembly reference instead of NuGet, `ProMvvm.SourceGenerators` can likewise be installed as the only package reference.
+
+The generator package is compile-time-only: it contains `analyzers/dotnet/cs/ProMvvm.SourceGenerators.dll` and no `lib` or runtime assembly. Generated descriptors still use `ProMvvm.PropertyPath`, so the runtime assembly must be available to the consuming compilation.
 
 ### Direct typed getters
 
@@ -416,7 +436,7 @@ dotnet publish tests/ProMvvm.AotSmoke -c Release -r osx-arm64 --self-contained
 
 Release unit tests enforce 100% line coverage, at least 98% branch coverage, and 100% method coverage. Dedicated generator tests validate emitted descriptors and overloads; integration tests compile and execute both source-generator ecosystems.
 
-CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed.
+CI builds and tests on Linux, Windows, and macOS, and full-trim and NativeAOT smoke executables run on all three platforms. Both framework samples are also NativeAOT-published and executed. Package smoke tests restore from the freshly built local feed and validate both automatic generator installation through `ProMvvm` and an explicit `ProMvvm.SourceGenerators` reference.
 
 ## Benchmarks
 
@@ -451,7 +471,7 @@ See [benchmarks/README.md](benchmarks/README.md) for the complete result tables,
 
 | Area | `0.1.0` status |
 | --- | --- |
-| Package | One dependency-free runtime package with the descriptor generator bundled as an analyzer |
+| Packages | Dependency-free `ProMvvm` runtime plus a compile-time-only `ProMvvm.SourceGenerators` analyzer package; the runtime package installs the analyzer automatically |
 | Typed API | Generated and handwritten paths, direct getters, nested paths, selectors, and tuples through arity 12 |
 | Migration API | ReactiveUI-compatible expression and string-name observation, including selectors and tuples through arity 12 |
 | Notifications | Direct INPC plus explicit custom-event and observable-stream adapters; no service locator |

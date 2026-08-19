@@ -1,6 +1,6 @@
 # ProMvvm architecture
 
-This document describes the architecture implemented in ProMvvm `0.1.0-alpha.1`, the performance decisions behind it, and how its typed and expression APIs compare with the `WhenAnyValue` design shipped in ReactiveUI 24.0.0. It documents the current code rather than a proposed end state.
+This document describes the architecture implemented in ProMvvm `0.1.0`, the performance decisions behind it, and how its typed and expression APIs compare with the `WhenAnyValue` design shipped in ReactiveUI 24.0.0. It documents the current code rather than a proposed end state.
 
 ## Scope and design goals
 
@@ -110,7 +110,7 @@ The name is explicit because an ordinary delegate does not carry reliable member
 
 `[GeneratePropertyPaths]` activates an incremental Roslyn generator. For each accessible instance property declared by a non-generic annotated type it emits a sibling `{TypeName}PropertyPaths` class with static, reusable `PropertyPath<TSource,TValue>` fields. It also recognizes fields consumed by CommunityToolkit.Mvvm `[ObservableProperty]` and ReactiveUI.SourceGenerators `[Reactive]`, deriving the property name using those generators' conventional field-name transformation. This is necessary because generators execute independently and cannot rely on another generator's output being visible as syntax input.
 
-Generated fields contain only a constant property name and a static typed getter. They perform no reflection, expression construction, registration, or runtime lookup. The generator is shipped in the runtime NuGet package under `analyzers/dotnet/cs`, while its output becomes ordinary consumer code and introduces no runtime generator dependency. Generic targets currently report `PMVVM001` rather than emitting an incorrectly scoped descriptor type.
+Generated fields contain only a constant property name and a static typed getter. They perform no reflection, expression construction, registration, or runtime lookup. The compile-time-only `ProMvvm.SourceGenerators` package contains the analyzer under `analyzers/dotnet/cs`; the `ProMvvm` runtime package depends on the matching generator version so normal consumers install both with one reference. Advanced builds may reference the analyzer package explicitly. Its output becomes ordinary consumer code and introduces no runtime generator dependency. Generic targets currently report `PMVVM001` rather than emitting an incorrectly scoped descriptor type.
 
 ### Reusable `PropertyPath`
 
