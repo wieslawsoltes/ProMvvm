@@ -478,4 +478,4 @@ Commands, activation, and routing remain longer-term compatibility areas rather 
 
 ## License
 
-ProMvvm is licensed under the [MIT License](LICENSE). Copyright © 2026 Wiesław Šoltés and ProMvvm contributors.
+ProMvvm is licensed under the [MIT License](LICENSE). Copyright © 2026 Wiesław Šoltés.
